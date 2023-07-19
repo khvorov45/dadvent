@@ -1,0 +1,5 @@
+{
+	"name": "dadvent",
+	"targetPath": "build",
+	"buildOptions": ["betterC"]
+}
