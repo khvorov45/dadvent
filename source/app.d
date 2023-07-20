@@ -1,13 +1,46 @@
-void year2023day1() {
-    int x = 1;
+struct Arena {
+    void* base;
+    long size;
+    long used;
+    void* freeptr() => base + used;
+    long freesize() => size - used;
 }
 
-void year2023day2() {
-    int x = 0;
+Arena globalArena;
+
+void year2022day1() {
+    string input = getInput(__FUNCTION__);
 }
 
-void year2023day3() {
-    int x = 0;
+void year2022day2() {
+    string input = getInput(__FUNCTION__);
+}
+
+void year2022day3() {
+    string input = getInput(__FUNCTION__);
+}
+
+string getInput(string functionName) {
+    string justName = functionName[__MODULE__.length + 1 .. functionName.length];
+    string inputPath = fmt("input/", justName);
+    writeToStdout(inputPath);
+    return "";
+}
+
+string fmt(string[] arr...) {
+    char* ptr = cast(char*) globalArena.freeptr;
+    long len = 0;
+    foreach (arg; arr) {
+        import core.stdc.string;
+
+        assert(arg.length <= globalArena.freesize);
+        memcpy(globalArena.freeptr, arg.ptr, arg.length);
+
+        len += arg.length;
+        globalArena.used += arg.length;
+    }
+    string result = cast(string) ptr[0 .. len];
+    return result;
 }
 
 bool strstarts(string str, string prefix) {
@@ -36,15 +69,19 @@ bool callFunctionByName(string name) {
 
 extern (C) int main(int argc, char** argv) {
     if (argc <= 1) {
-        writeToStdout("provide function names to run (like year2023day1)\n");
+        writeToStdout("provide function names to run (like year2022day1)\n");
         return 0;
     }
 
-    foreach (carg; argv[1 .. argc]) {
-        import core.stdc.string : strlen;
+    globalArena.size = 1 * 1024 * 1024 * 1024;
+    globalArena.base = allocvmem(globalArena.size);
 
-        if (!callFunctionByName(cast(string) carg[0 .. strlen(carg)])) {
-            writeToStdout("arg not found\n");
+    foreach (carg; argv[1 .. argc]) {
+        import core.stdc.string;
+
+        string arg = cast(string) carg[0 .. strlen(carg)];
+        if (!callFunctionByName(arg)) {
+            writeToStdout(fmt("function ", arg, " not found\n"));
         }
     }
 
@@ -53,7 +90,7 @@ extern (C) int main(int argc, char** argv) {
 
 void writeToStdout(string msg) {
     version (linux) {
-        import core.sys.posix.unistd : write, STDOUT_FILENO;
+        import core.sys.posix.unistd;
 
         write(STDOUT_FILENO, msg.ptr, msg.length);
     }
@@ -61,4 +98,21 @@ void writeToStdout(string msg) {
     version (Windows) {
         static assert(0, "unimplemented");
     }
+}
+
+void* allocvmem(long size) {
+    void* ptr = null;
+
+    version (linux) {
+        import core.sys.posix.sys.mman;
+
+        ptr = mmap(null, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, 0, 0);
+        assert(ptr != MAP_FAILED);
+    }
+
+    version (Windows) {
+        static assert(0, "unimplemented");
+    }
+
+    return ptr;
 }
