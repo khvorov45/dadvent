@@ -1,13 +1,3 @@
-struct Arena {
-    void* base;
-    long size;
-    long used;
-    void* freeptr() => base + used;
-    long freesize() => size - used;
-}
-
-Arena globalArena;
-
 void year2022day1() {
     string input = getInput(__FUNCTION__);
 }
@@ -19,6 +9,25 @@ void year2022day2() {
 void year2022day3() {
     string input = getInput(__FUNCTION__);
 }
+
+struct Arena {
+    void* base;
+    long size;
+    long used;
+}
+
+void* freeptr(Arena* arena) {
+    void* result = arena.base + arena.used;
+    return result;
+}
+
+long freesize(Arena* arena) {
+    long result = arena.size - arena.used;
+    return result;
+}
+
+Arena globalArena_;
+Arena* globalArena;
 
 string getInput(string functionName) {
     string justName = functionName[__MODULE__.length + 1 .. functionName.length];
@@ -33,8 +42,8 @@ string fmt(string[] arr...) {
     foreach (arg; arr) {
         import core.stdc.string;
 
-        assert(arg.length <= globalArena.freesize);
-        memcpy(globalArena.freeptr, arg.ptr, arg.length);
+        assert(arg.length <= freesize(globalArena));
+        memcpy(freeptr(globalArena), arg.ptr, arg.length);
 
         len += arg.length;
         globalArena.used += arg.length;
@@ -73,6 +82,7 @@ extern (C) int main(int argc, char** argv) {
         return 0;
     }
 
+    globalArena = &globalArena_;
     globalArena.size = 1 * 1024 * 1024 * 1024;
     globalArena.base = allocvmem(globalArena.size);
 
