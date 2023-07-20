@@ -34,8 +34,7 @@ struct Arena {
     void changeUsed(long by) => used += by, assert(used <= size), assert(used >= 0);
 }
 
-Arena globalArena_;
-Arena* globalArena;
+Arena globalArena;
 
 long parseInt(string str) {
     long result = 0;
@@ -217,7 +216,6 @@ void runTests() {
 }
 
 extern (C) int main(int argc, char** argv) {
-    globalArena = &globalArena_;
     globalArena.size = 1 * 1024 * 1024 * 1024;
     globalArena.base = allocvmem(globalArena.size);
 
