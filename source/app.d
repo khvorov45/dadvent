@@ -61,7 +61,7 @@ bool callFunctionByName(string name) {
             static if (strstarts(member.stringof, "\"year")) {
                 mixin(
                     "if (name == ", member.stringof, ") 
-                    { writeToStdout(\"", member, "\n\"); ", member, "(); foundMatch = true; }"
+                    { writeToStdout(\"exec ", member, "\n\"); ", member, "(); foundMatch = true; }"
                 );
             }
         }
@@ -99,7 +99,12 @@ void writeToStdout(string msg) {
     }
 
     version (Windows) {
-        static assert(0, "unimplemented");
+        import core.sys.windows.winbase;
+        import core.sys.windows.windef;
+
+        DWORD written = 0;
+        assert(WriteFile(cast(HANDLE) STD_OUTPUT_HANDLE, msg.ptr, cast(uint) msg.length, &written, null));
+        assert(written == msg.length);
     }
 }
 
@@ -114,7 +119,11 @@ void* allocvmem(long size) {
     }
 
     version (Windows) {
-        static assert(0, "unimplemented");
+        import core.sys.windows.winbase;
+        import core.sys.windows.winnt;
+
+        ptr = VirtualAlloc(null, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        assert(ptr);
     }
 
     return ptr;
@@ -122,6 +131,8 @@ void* allocvmem(long size) {
 
 string readEntireFile(string path) {
     string content = "";
+    char* ptr = cast(char*) globalArena.freeptr;
+    long size = 0;
 
     version (linux) {
         import core.sys.posix.fcntl;
@@ -132,18 +143,35 @@ string readEntireFile(string path) {
         scope (exit)
             close(fd);
 
-        char* ptr = cast(char*) globalArena.freeptr;
         ssize_t readRes = read(fd, ptr, globalArena.freesize);
         assert(readRes != -1, "could not read file");
 
         globalArena.changeUsed(readRes);
-
-        content = cast(string) ptr[0 .. readRes];
+        size = readRes;
     }
 
     version (Windows) {
-        static assert(0, "unimplemented");
+        import core.sys.windows.winbase;
+        import core.sys.windows.winnt;
+
+        HANDLE handle = CreateFileA(
+            path.ptr,
+            GENERIC_READ,
+            FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+            null,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            null,
+        );
+        assert(handle != INVALID_HANDLE_VALUE);
+        scope (exit)
+            CloseHandle(handle);
+
+        DWORD bytesRead = 0;
+        assert(ReadFile(handle, ptr, cast(uint) globalArena.freesize, &bytesRead, null));
+        size = bytesRead;
     }
 
+    content = cast(string) ptr[0 .. size];
     return content;
 }

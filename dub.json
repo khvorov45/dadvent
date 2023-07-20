@@ -1,5 +1,6 @@
 {
 	"name": "dadvent",
 	"targetPath": "build",
+	"lflags": ["/incremental:no"],
 	"buildOptions": ["betterC"]
 }
