@@ -1,5 +1,10 @@
 void year2022day1() {
     string input = getInput(__FUNCTION__);
+    LineRange lines = LineRange(input);
+    foreach (line; lines) {
+        writeToStdout(line);
+        writeToStdout("\n");
+    }
 }
 
 void year2022day2() {
@@ -21,6 +26,84 @@ struct Arena {
 
 Arena globalArena_;
 Arena* globalArena;
+
+struct LineRange {
+    string input;
+    string line;
+    long lineEndLen;
+    long offset() => line.ptr - input.ptr;
+    bool empty() => offset == input.length;
+    string front() => line;
+
+    void popFront() {
+        string unprocessed = input[offset + line.length + lineEndLen .. input.length];
+        long size = 0;
+        bool lineEndDetected = false;
+        foreach (ind, ch; unprocessed) {
+            if (ch == '\n' || ch == '\r') {
+                lineEndDetected = true;
+                break;
+            }
+            size += 1;
+        }
+        line = unprocessed[0 .. size];
+        lineEndLen = lineEndDetected;
+        if (unprocessed.length > size + 1 && unprocessed[size] == '\r' && unprocessed[size + 1] == '\n') {
+            lineEndLen = 2;
+        }
+    }
+
+    this(string input_) {
+        input = input_;
+        line = input[0 .. 0];
+        popFront();
+    }
+}
+
+unittest {
+    string testInput = "";
+    LineRange range = LineRange(testInput);
+    assert(range.empty);
+}
+
+unittest {
+    string[4] testInputs = ["1234", "1234\n", "1234\r", "1234\r\n"];
+    foreach (testInput; testInputs) {
+        LineRange range = LineRange(testInput);
+        assert(!range.empty);
+        assert(range.front == "1234");
+        range.popFront();
+        assert(range.empty);
+    }
+}
+
+unittest {
+    string[3] testInputs = ["1234\n543", "1234\r543", "1234\r\n543"];
+    foreach (testInput; testInputs) {
+        LineRange range = LineRange(testInput);
+        assert(!range.empty);
+        assert(range.front == "1234");
+        range.popFront();
+        assert(!range.empty);
+        assert(range.front == "543");
+        range.popFront();
+        assert(range.empty);
+    }
+}
+
+unittest {
+    string[1] testInputs = ["1234\n\n"];
+    foreach (testInput; testInputs) {
+        LineRange range = LineRange(testInput);
+        assert(!range.empty);
+        assert(range.front == "1234");
+        range.popFront();
+        assert(!range.empty);
+        assert(range.front == "");
+        range.popFront();
+        assert(range.empty);
+    }
+}
 
 string getInput(string functionName) {
     string justName = functionName[__MODULE__.length + 1 .. functionName.length];
@@ -69,7 +152,15 @@ bool callFunctionByName(string name) {
     return foundMatch;
 }
 
+void runTests() {
+    static foreach (test; __traits(getUnitTests, __traits(parent, main))) {
+        test();
+    }
+}
+
 extern (C) int main(int argc, char** argv) {
+    runTests();
+
     if (argc <= 1) {
         writeToStdout("provide function names to run (like year2022day1)\n");
         return 0;
