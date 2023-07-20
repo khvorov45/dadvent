@@ -1,10 +1,18 @@
 void year2022day1() {
     string input = getInput(__FUNCTION__);
     LineRange lines = LineRange(input);
+    long thisSum = 0;
+    long maxSum = 0;
     foreach (line; lines) {
-        writeToStdout(line);
-        writeToStdout("\n");
+        if (line.length > 0) {
+            long number = parseInt(line);
+            thisSum += number;
+        } else {
+            maxSum = max(maxSum, thisSum);
+            thisSum = 0;
+        }
     }
+    writeToStdout(fmt(fmt(maxSum), "\n"));
 }
 
 void year2022day2() {
@@ -14,6 +22,8 @@ void year2022day2() {
 void year2022day3() {
     string input = getInput(__FUNCTION__);
 }
+
+T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
 
 struct Arena {
     void* base;
@@ -26,6 +36,24 @@ struct Arena {
 
 Arena globalArena_;
 Arena* globalArena;
+
+long parseInt(string str) {
+    long result = 0;
+    long curpow10 = 1;
+    foreach_reverse (ch; str) {
+        assert(ch <= '9' && ch >= '0');
+        long digit = ch - '0';
+        long coef = digit * curpow10;
+        result += coef;
+        curpow10 *= 10;
+    }
+    return result;
+}
+
+unittest {
+    assert(parseInt("0") == 0);
+    assert(parseInt("123") == 123);
+}
 
 struct LineRange {
     string input;
@@ -112,6 +140,36 @@ string getInput(string functionName) {
     return content;
 }
 
+string fmt(long number) {
+    assert(number >= 0);
+    long maxpow10 = 1;
+    while (number / maxpow10 >= 10) {
+        maxpow10 *= 10;
+    }
+
+    char* ptr = cast(char*) globalArena.freeptr;
+    long len = 0;
+    long curnumber = number;
+    for (long curpow10 = maxpow10; curpow10; curpow10 /= 10) {
+        long digit = curnumber / curpow10;
+        assert(digit >= 0 && digit <= 9);
+        curnumber -= digit * curpow10;
+
+        char ch = cast(char)((cast(char) digit) + '0');
+        ptr[len] = ch;
+        len += 1;
+    }
+
+    string result = cast(string) ptr[0 .. len];
+    return result;
+}
+
+unittest {
+    assert(fmt(0) == "0");
+    assert(fmt(5) == "5");
+    assert(fmt(1234) == "1234");
+}
+
 string fmt(string[] arr...) {
     char* ptr = cast(char*) globalArena.freeptr;
     long len = 0;
@@ -159,16 +217,16 @@ void runTests() {
 }
 
 extern (C) int main(int argc, char** argv) {
+    globalArena = &globalArena_;
+    globalArena.size = 1 * 1024 * 1024 * 1024;
+    globalArena.base = allocvmem(globalArena.size);
+
     runTests();
 
     if (argc <= 1) {
         writeToStdout("provide function names to run (like year2022day1)\n");
         return 0;
     }
-
-    globalArena = &globalArena_;
-    globalArena.size = 1 * 1024 * 1024 * 1024;
-    globalArena.base = allocvmem(globalArena.size);
 
     foreach (carg; argv[1 .. argc]) {
         import core.stdc.string;
