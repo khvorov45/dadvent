@@ -14,16 +14,8 @@ struct Arena {
     void* base;
     long size;
     long used;
-}
-
-void* freeptr(Arena* arena) {
-    void* result = arena.base + arena.used;
-    return result;
-}
-
-long freesize(Arena* arena) {
-    long result = arena.size - arena.used;
-    return result;
+    void* freeptr() => base + used;
+    long freesize() => size - used;
 }
 
 Arena globalArena_;
@@ -42,8 +34,8 @@ string fmt(string[] arr...) {
     foreach (arg; arr) {
         import core.stdc.string;
 
-        assert(arg.length <= freesize(globalArena));
-        memcpy(freeptr(globalArena), arg.ptr, arg.length);
+        assert(arg.length <= globalArena.freesize);
+        memcpy(globalArena.freeptr, arg.ptr, arg.length);
 
         len += arg.length;
         globalArena.used += arg.length;
