@@ -16,3 +16,4 @@ dadvent-test-*
 *.lst
 .vscode
 *.rdbg
+build/*

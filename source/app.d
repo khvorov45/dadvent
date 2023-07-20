@@ -1,5 +1,3 @@
-import core.stdc.string : strlen;
-
 void year2023day1() {
     int x = 1;
 }
@@ -26,17 +24,41 @@ bool callFunctionByName(string name) {
     static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
         static if (__traits(isStaticFunction, mixin(member))) {
             static if (strstarts(member.stringof, "\"year")) {
-                mixin("if (name == ", member.stringof, ") { ", member, "(); foundMatch = true; }");
+                mixin(
+                    "if (name == ", member.stringof, ") 
+                    { writeToStdout(\"", member, "\n\"); ", member, "(); foundMatch = true; }"
+                );
             }
         }
     }
     return foundMatch;
 }
 
-extern (C) void main(int argc, char** argv) {
-    foreach (carg; argv[0 .. argc]) {
+extern (C) int main(int argc, char** argv) {
+    if (argc <= 1) {
+        writeToStdout("provide function names to run (like year2023day1)\n");
+        return 0;
+    }
+
+    foreach (carg; argv[1 .. argc]) {
+        import core.stdc.string : strlen;
+
         if (!callFunctionByName(cast(string) carg[0 .. strlen(carg)])) {
-            // TODO(khvorov) Error
+            writeToStdout("arg not found\n");
         }
+    }
+
+    return 0;
+}
+
+void writeToStdout(string msg) {
+    version (linux) {
+        import core.sys.posix.unistd : write, STDOUT_FILENO;
+
+        write(STDOUT_FILENO, msg.ptr, msg.length);
+    }
+
+    version (Windows) {
+        static assert(0, "unimplemented");
     }
 }
