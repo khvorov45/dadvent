@@ -16,6 +16,7 @@ struct Arena {
     long used;
     void* freeptr() => base + used;
     long freesize() => size - used;
+    void changeUsed(long by) => used += by, assert(used <= size), assert(used >= 0);
 }
 
 Arena globalArena_;
@@ -23,9 +24,9 @@ Arena* globalArena;
 
 string getInput(string functionName) {
     string justName = functionName[__MODULE__.length + 1 .. functionName.length];
-    string inputPath = fmt("input/", justName);
-    writeToStdout(inputPath);
-    return "";
+    string inputPath = fmt("input/", justName, ".txt");
+    string content = readEntireFile(inputPath);
+    return content;
 }
 
 string fmt(string[] arr...) {
@@ -117,4 +118,32 @@ void* allocvmem(long size) {
     }
 
     return ptr;
+}
+
+string readEntireFile(string path) {
+    string content = "";
+
+    version (linux) {
+        import core.sys.posix.fcntl;
+        import core.sys.posix.unistd;
+
+        int fd = open(cast(char*) path.ptr, O_RDONLY);
+        assert(fd != -1, "could not open file");
+        scope (exit)
+            close(fd);
+
+        char* ptr = cast(char*) globalArena.freeptr;
+        ssize_t readRes = read(fd, ptr, globalArena.freesize);
+        assert(readRes != -1, "could not read file");
+
+        globalArena.changeUsed(readRes);
+
+        content = cast(string) ptr[0 .. readRes];
+    }
+
+    version (Windows) {
+        static assert(0, "unimplemented");
+    }
+
+    return content;
 }
