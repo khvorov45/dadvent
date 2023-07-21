@@ -123,7 +123,7 @@ string tempNullTerm(string str) {
     memcpy(buf.ptr, str.ptr, str.length);
     buf[str.length] = 0;
 
-    string result = cast(string) buf;
+    string result = cast(string)(buf[0 .. buf.length - 1]);
     return result;
 }
 
@@ -451,5 +451,14 @@ void runTests() {
 
     {
         assert(fmt("1", "22", "333") == "122333");
+    }
+
+    {
+        string str = "12345678";
+        string strSlice = str[1 .. str.length - 1];
+        assert(strSlice.ptr[strSlice.length] == '8');
+        string strSlice0 = tempNullTerm(strSlice);
+        assert(strSlice0 == "234567");
+        assert(strSlice0.ptr[strSlice0.length] == 0);
     }
 }
