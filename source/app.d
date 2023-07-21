@@ -26,15 +26,54 @@ void year2022day3() {
 T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
 
 struct Arena {
-    void* base;
-    long size;
-    long used;
-    void* freeptr() => base + used;
-    long freesize() => size - used;
-    void changeUsed(long by) => used += by, assert(used <= size), assert(used >= 0);
+    void[] buf;
+    void[] free;
+
+    this(void[] buf_) {
+        buf = buf_;
+        free = buf_;
+    }
 }
 
-Arena globalArena;
+void[] alloc(ref Arena arena, long size) {
+    void[] result = arena.free[0 .. size];
+    arena.free = arena.free[size .. arena.free.length];
+    return result;
+}
+
+struct CircularBuffer {
+    Arena arena;
+    alias arena this;
+}
+
+void[] alloc(ref CircularBuffer cb, long size) {
+    if (size > cb.free.length) {
+        cb.free = cb.buf;
+    }
+    void[] result = alloc(cb.arena, size);
+    return result;
+}
+
+struct Memory {
+    Arena arena;
+    CircularBuffer circularBuffer;
+}
+
+Memory globalMemory;
+
+void[] alloc(long size) => alloc(globalMemory.arena, size);
+void[] talloc(long size) => alloc(globalMemory.circularBuffer, size);
+
+string tempNullTerm(string str) {
+    import core.stdc.string;
+
+    char[] buf = cast(char[]) talloc(str.length + 1);
+    memcpy(buf.ptr, str.ptr, str.length);
+    buf[str.length] = 0;
+
+    string result = cast(string) buf;
+    return result;
+}
 
 long parseInt(string str) {
     long result = 0;
@@ -47,11 +86,6 @@ long parseInt(string str) {
         curpow10 *= 10;
     }
     return result;
-}
-
-unittest {
-    assert(parseInt("0") == 0);
-    assert(parseInt("123") == 123);
 }
 
 struct LineRange {
@@ -87,51 +121,6 @@ struct LineRange {
     }
 }
 
-unittest {
-    string testInput = "";
-    LineRange range = LineRange(testInput);
-    assert(range.empty);
-}
-
-unittest {
-    string[4] testInputs = ["1234", "1234\n", "1234\r", "1234\r\n"];
-    foreach (testInput; testInputs) {
-        LineRange range = LineRange(testInput);
-        assert(!range.empty);
-        assert(range.front == "1234");
-        range.popFront();
-        assert(range.empty);
-    }
-}
-
-unittest {
-    string[3] testInputs = ["1234\n543", "1234\r543", "1234\r\n543"];
-    foreach (testInput; testInputs) {
-        LineRange range = LineRange(testInput);
-        assert(!range.empty);
-        assert(range.front == "1234");
-        range.popFront();
-        assert(!range.empty);
-        assert(range.front == "543");
-        range.popFront();
-        assert(range.empty);
-    }
-}
-
-unittest {
-    string[1] testInputs = ["1234\n\n"];
-    foreach (testInput; testInputs) {
-        LineRange range = LineRange(testInput);
-        assert(!range.empty);
-        assert(range.front == "1234");
-        range.popFront();
-        assert(!range.empty);
-        assert(range.front == "");
-        range.popFront();
-        assert(range.empty);
-    }
-}
-
 string getInput(string functionName) {
     string justName = functionName[__MODULE__.length + 1 .. functionName.length];
     string inputPath = fmt("input/", justName, ".txt");
@@ -142,44 +131,39 @@ string getInput(string functionName) {
 string fmt(long number) {
     assert(number >= 0);
     long maxpow10 = 1;
+    long digitCount = 1;
     while (number / maxpow10 >= 10) {
         maxpow10 *= 10;
+        digitCount += 1;
     }
 
-    char* ptr = cast(char*) globalArena.freeptr;
-    long len = 0;
+    char[] buf = cast(char[]) alloc(digitCount);
     long curnumber = number;
+    long curDigitInd = 0;
     for (long curpow10 = maxpow10; curpow10; curpow10 /= 10) {
         long digit = curnumber / curpow10;
         assert(digit >= 0 && digit <= 9);
         curnumber -= digit * curpow10;
 
         char ch = cast(char)((cast(char) digit) + '0');
-        ptr[len] = ch;
-        len += 1;
+        buf[curDigitInd] = ch;
+        curDigitInd += 1;
     }
 
-    string result = cast(string) ptr[0 .. len];
+    string result = cast(string) buf;
     return result;
 }
 
-unittest {
-    assert(fmt(0) == "0");
-    assert(fmt(5) == "5");
-    assert(fmt(1234) == "1234");
-}
-
 string fmt(string[] arr...) {
-    char* ptr = cast(char*) globalArena.freeptr;
+    char* ptr = cast(char*) globalMemory.arena.free.ptr;
     long len = 0;
     foreach (arg; arr) {
         import core.stdc.string;
 
-        assert(arg.length <= globalArena.freesize);
-        memcpy(globalArena.freeptr, arg.ptr, arg.length);
+        char[] thisArg = cast(char[]) alloc(arg.length);
+        memcpy(thisArg.ptr, arg.ptr, arg.length);
 
         len += arg.length;
-        globalArena.used += arg.length;
     }
     string result = cast(string) ptr[0 .. len];
     return result;
@@ -209,15 +193,14 @@ bool callFunctionByName(string name) {
     return foundMatch;
 }
 
-void runTests() {
-    static foreach (test; __traits(getUnitTests, __traits(parent, main))) {
-        test();
-    }
-}
-
 extern (C) int main(int argc, char** argv) {
-    globalArena.size = 1 * 1024 * 1024 * 1024;
-    globalArena.base = allocvmem(globalArena.size);
+    {
+        long size = 1 * 1024 * 1024 * 1024;
+        void* ptr = allocvmem(size);
+        globalMemory.arena = Arena(ptr[0 .. size]);
+        void[] buf = alloc(globalMemory.arena.buf.length / 2);
+        globalMemory.circularBuffer = CircularBuffer(Arena(buf));
+    }
 
     runTests();
 
@@ -252,6 +235,9 @@ void writeToStdout(string msg) {
         DWORD written = 0;
         assert(WriteFile(cast(HANDLE) STD_OUTPUT_HANDLE, msg.ptr, cast(uint) msg.length, &written, null));
         assert(written == msg.length);
+
+        string msg0 = tempNullTerm(msg);
+        OutputDebugStringA(msg0.ptr);
     }
 }
 
@@ -278,22 +264,22 @@ void* allocvmem(long size) {
 
 string readEntireFile(string path) {
     string content = "";
-    char* ptr = cast(char*) globalArena.freeptr;
+    char* ptr = cast(char*) globalMemory.arena.free.ptr;
     long size = 0;
+
+    string path0 = tempNullTerm(path);
 
     version (linux) {
         import core.sys.posix.fcntl;
         import core.sys.posix.unistd;
 
-        int fd = open(cast(char*) path.ptr, O_RDONLY);
+        int fd = open(cast(char*) path0.ptr, O_RDONLY);
         assert(fd != -1, "could not open file");
         scope (exit)
             close(fd);
 
-        ssize_t readRes = read(fd, ptr, globalArena.freesize);
+        ssize_t readRes = read(fd, ptr, globalMemory.arena.free.length);
         assert(readRes != -1, "could not read file");
-
-        globalArena.changeUsed(readRes);
         size = readRes;
     }
 
@@ -302,7 +288,7 @@ string readEntireFile(string path) {
         import core.sys.windows.winnt;
 
         HANDLE handle = CreateFileA(
-            path.ptr,
+            path0.ptr,
             GENERIC_READ,
             FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
             null,
@@ -315,10 +301,103 @@ string readEntireFile(string path) {
             CloseHandle(handle);
 
         DWORD bytesRead = 0;
-        assert(ReadFile(handle, ptr, cast(uint) globalArena.freesize, &bytesRead, null));
+        assert(ReadFile(handle, ptr, cast(uint) globalMemory.arena.free.length, &bytesRead, null));
         size = bytesRead;
     }
 
+    globalMemory.arena.free = globalMemory.arena.free[size .. globalMemory.arena.free.length];
+
     content = cast(string) ptr[0 .. size];
     return content;
+}
+
+void runTests() {
+    {
+        char[64] buf;
+        Arena arena = Arena(buf);
+
+        void[] a1 = alloc(arena, 10);
+        assert(a1.ptr == buf.ptr);
+        assert(a1.length == 10);
+        assert(arena.buf == buf);
+        assert(arena.free.ptr == arena.buf.ptr + 10);
+        assert(arena.free.length == 54);
+
+        void[] a2 = alloc(arena, 20);
+        assert(a2.ptr == buf.ptr + 10);
+        assert(a2.length == 20);
+        assert(arena.buf == buf);
+        assert(arena.free.ptr == arena.buf.ptr + 30);
+        assert(arena.free.length == 34);
+    }
+
+    {
+        char[64] buf;
+        CircularBuffer cb = CircularBuffer(Arena(buf));
+        void[] a1 = alloc(cb, 10);
+        void[] a2 = alloc(cb, 64);
+        assert(a1.ptr == a2.ptr);        
+    }
+
+    {
+        assert(parseInt("0") == 0);
+        assert(parseInt("123") == 123);
+    }
+
+    {
+        string testInput = "";
+        LineRange range = LineRange(testInput);
+        assert(range.empty);
+    }
+
+    {
+        string[4] testInputs = ["1234", "1234\n", "1234\r", "1234\r\n"];
+        foreach (testInput; testInputs) {
+            LineRange range = LineRange(testInput);
+            assert(!range.empty);
+            assert(range.front == "1234");
+            range.popFront();
+            assert(range.empty);
+        }
+    }
+
+    {
+        string[3] testInputs = ["1234\n543", "1234\r543", "1234\r\n543"];
+        foreach (testInput; testInputs) {
+            LineRange range = LineRange(testInput);
+            assert(!range.empty);
+            assert(range.front == "1234");
+            range.popFront();
+            assert(!range.empty);
+            assert(range.front == "543");
+            range.popFront();
+            assert(range.empty);
+        }
+    }
+
+    {
+        string[1] testInputs = ["1234\n\n"];
+        foreach (testInput; testInputs) {
+            LineRange range = LineRange(testInput);
+            assert(!range.empty);
+            assert(range.front == "1234");
+            range.popFront();
+            assert(!range.empty);
+            assert(range.front == "");
+            range.popFront();
+            assert(range.empty);
+        }
+    }
+
+    {
+        string wholeString = cast(string) globalMemory.arena.free.ptr[0 .. 6];
+        assert(fmt(0) == "0");
+        assert(fmt(5) == "5");
+        assert(fmt(1234) == "1234");
+        assert(wholeString == "051234");
+    }
+
+    {
+        assert(fmt("1", "22", "333") == "122333");
+    }
 }
