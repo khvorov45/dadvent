@@ -17,6 +17,58 @@ void year2022day1() {
 
 void year2022day2() {
     string input = getInput(__FUNCTION__);
+    LineRange lines = LineRange(input);
+    long scorePart1 = 0;
+    long scorePart2 = 0;
+    foreach (line; lines) {
+        assert(line.length == 3);
+
+        char c1 = line.ptr[0];
+        assert(c1 == 'A' || c1 == 'B' || c1 == 'C');
+
+        char c2 = line.ptr[2];
+        assert(c2 == 'X' || c2 == 'Y' || c2 == 'Z');
+
+        long choice1 = c1 - 'A';
+
+        long choice2Part1 = c2 - 'X';
+        long scoreOutcomePart1 = 0;
+        {
+            bool draw = choice1 == choice2Part1;
+            bool lose1 = ((choice1 + 1) % 3) == choice2Part1;
+            bool lose2 = ((choice2Part1 + 1) % 3) == choice1;
+            assert(draw || lose1 || lose2);
+
+            if (draw) {
+                assert(!lose1 && !lose2);
+                scoreOutcomePart1 = 3;
+            } else if (lose1) {
+                assert(!draw && !lose2);
+                scoreOutcomePart1 = 6;
+            }
+        }
+
+        long scoreOutcomePart2 = (c2 - 'X') * 3;
+        long choice2Part2 = 0;
+        switch (scoreOutcomePart2) {
+        case 0:
+            choice2Part2 = (choice1 + 2) % 3;
+            break;
+        case 3:
+            choice2Part2 = choice1;
+            break;
+        case 6:
+            choice2Part2 = (choice1 + 1) % 3;
+            break;
+        default:
+            assert(false, "unreachable");
+        }
+
+        scorePart1 += scoreOutcomePart1 + choice2Part1 + 1;
+        scorePart2 += scoreOutcomePart2 + choice2Part2 + 1;
+    }
+    writeToStdout(fmt(fmt(scorePart1), "\n"));
+    writeToStdout(fmt(fmt(scorePart2), "\n"));
 }
 
 void year2022day3() {
@@ -336,7 +388,7 @@ void runTests() {
         CircularBuffer cb = CircularBuffer(Arena(buf));
         void[] a1 = alloc(cb, 10);
         void[] a2 = alloc(cb, 64);
-        assert(a1.ptr == a2.ptr);        
+        assert(a1.ptr == a2.ptr);
     }
 
     {
