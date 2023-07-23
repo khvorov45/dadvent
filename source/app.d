@@ -1,4 +1,5 @@
 void year2022day1() {
+    writeToStdout(__FUNCTION__ ~ "\n");
     string input = getInput(__FUNCTION__);
     LineRange lines = LineRange(input);
     long thisSum = 0;
@@ -16,6 +17,7 @@ void year2022day1() {
 }
 
 void year2022day2() {
+    writeToStdout(__FUNCTION__ ~ "\n");
     string input = getInput(__FUNCTION__);
     LineRange lines = LineRange(input);
     long scorePart1 = 0;
@@ -72,6 +74,7 @@ void year2022day2() {
 }
 
 void year2022day3() {
+    writeToStdout(__FUNCTION__ ~ "\n");
     string input = getInput(__FUNCTION__);
 }
 
@@ -79,17 +82,15 @@ T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
 
 struct Arena {
     void[] buf;
-    void[] free;
-
-    this(void[] buf_) {
-        buf = buf_;
-        free = buf_;
-    }
+    long used;
+    void* freeptr() => buf.ptr + used;
+    long freesize() => buf.length - used;
 }
 
 void[] alloc(ref Arena arena, long size) {
-    void[] result = arena.free[0 .. size];
-    arena.free = arena.free[size .. arena.free.length];
+    long newUsed = arena.used + size;
+    void[] result = arena.buf[arena.used .. newUsed];
+    arena.used = newUsed;
     return result;
 }
 
@@ -99,8 +100,8 @@ struct CircularBuffer {
 }
 
 void[] alloc(ref CircularBuffer cb, long size) {
-    if (size > cb.free.length) {
-        cb.free = cb.buf;
+    if (size > cb.freesize) {
+        cb.used = 0;
     }
     void[] result = alloc(cb.arena, size);
     return result;
@@ -207,7 +208,7 @@ string fmt(long number) {
 }
 
 string fmt(string[] arr...) {
-    char* ptr = cast(char*) globalMemory.arena.free.ptr;
+    char* ptr = cast(char*) globalMemory.arena.freeptr;
     long len = 0;
     foreach (arg; arr) {
         import core.stdc.string;
@@ -230,22 +231,17 @@ bool strstarts(string str, string prefix) {
     return result;
 }
 
-bool callFunctionByName(string name) {
-    bool foundMatch = false;
+void callAllFunctionsThatStartWithYear() {
     static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
         static if (__traits(isStaticFunction, mixin(member))) {
             static if (strstarts(member.stringof, "\"year")) {
-                mixin(
-                    "if (name == ", member.stringof, ") 
-                    { writeToStdout(\"exec ", member, "\n\"); ", member, "(); foundMatch = true; }"
-                );
+                mixin(member, "();");
             }
         }
     }
-    return foundMatch;
 }
 
-extern (C) int main(int argc, char** argv) {
+extern (C) int main() {
     {
         long size = 1 * 1024 * 1024 * 1024;
         void* ptr = allocvmem(size);
@@ -255,20 +251,7 @@ extern (C) int main(int argc, char** argv) {
     }
 
     runTests();
-
-    if (argc <= 1) {
-        writeToStdout("provide function names to run (like year2022day1)\n");
-        return 0;
-    }
-
-    foreach (carg; argv[1 .. argc]) {
-        import core.stdc.string;
-
-        string arg = cast(string) carg[0 .. strlen(carg)];
-        if (!callFunctionByName(arg)) {
-            writeToStdout(fmt("function ", arg, " not found\n"));
-        }
-    }
+    callAllFunctionsThatStartWithYear();
 
     return 0;
 }
@@ -316,7 +299,7 @@ void* allocvmem(long size) {
 
 string readEntireFile(string path) {
     string content = "";
-    char* ptr = cast(char*) globalMemory.arena.free.ptr;
+    char* ptr = cast(char*) globalMemory.arena.freeptr;
     long size = 0;
 
     string path0 = tempNullTerm(path);
@@ -353,11 +336,11 @@ string readEntireFile(string path) {
             CloseHandle(handle);
 
         DWORD bytesRead = 0;
-        assert(ReadFile(handle, ptr, cast(uint) globalMemory.arena.free.length, &bytesRead, null));
+        assert(ReadFile(handle, ptr, cast(uint) globalMemory.arena.freesize, &bytesRead, null));
         size = bytesRead;
     }
 
-    globalMemory.arena.free = globalMemory.arena.free[size .. globalMemory.arena.free.length];
+    globalMemory.arena.used += size;
 
     content = cast(string) ptr[0 .. size];
     return content;
@@ -372,15 +355,15 @@ void runTests() {
         assert(a1.ptr == buf.ptr);
         assert(a1.length == 10);
         assert(arena.buf == buf);
-        assert(arena.free.ptr == arena.buf.ptr + 10);
-        assert(arena.free.length == 54);
+        assert(arena.freeptr == arena.buf.ptr + 10);
+        assert(arena.freesize == 54);
 
         void[] a2 = alloc(arena, 20);
         assert(a2.ptr == buf.ptr + 10);
         assert(a2.length == 20);
         assert(arena.buf == buf);
-        assert(arena.free.ptr == arena.buf.ptr + 30);
-        assert(arena.free.length == 34);
+        assert(arena.freeptr == arena.buf.ptr + 30);
+        assert(arena.freesize == 34);
     }
 
     {
@@ -442,7 +425,7 @@ void runTests() {
     }
 
     {
-        string wholeString = cast(string) globalMemory.arena.free.ptr[0 .. 6];
+        string wholeString = cast(string) globalMemory.arena.freeptr[0 .. 6];
         assert(fmt(0) == "0");
         assert(fmt(5) == "5");
         assert(fmt(1234) == "1234");
