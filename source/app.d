@@ -82,7 +82,15 @@ T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
 
 struct Arena {
     void[] buf;
-    long used;
+
+    long used_;
+    @property used() => used_;
+    @property void used(long newUsed) {
+        assert(newUsed >= 0);
+        assert(newUsed <= buf.length);
+        used_ = newUsed;
+    }
+
     void* freeptr() => buf.ptr + used;
     long freesize() => buf.length - used;
 }
@@ -340,7 +348,7 @@ string readEntireFile(string path) {
         size = bytesRead;
     }
 
-    globalMemory.arena.used += size;
+    globalMemory.arena.used = globalMemory.arena.used + size;
 
     content = cast(string) ptr[0 .. size];
     return content;
