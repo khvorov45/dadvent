@@ -1,3 +1,5 @@
+import core.sys.posix.sys.resource;
+
 void year2022day1() {
     writeToStdout(__FUNCTION__ ~ "\n");
     string input = getInput(__FUNCTION__);
@@ -76,6 +78,80 @@ void year2022day2() {
 void year2022day3() {
     writeToStdout(__FUNCTION__ ~ "\n");
     string input = getInput(__FUNCTION__);
+    LineRange lines = LineRange(input);
+
+    const long maxPriority = 52;
+    bool[maxPriority + 1][3] groupLinePriorities;
+    long curGroupLineIndex = 0;
+
+    long sharedItemsPrioritySum = 0;
+    long badgePrioritySum = 0;
+    foreach (line; lines) {
+        assert(line.length % 2 == 0);
+        long perCompartment = line.length / 2;
+        string comp1 = line[0 .. perCompartment];
+        string comp2 = line[perCompartment .. line.length];
+
+        bool[maxPriority + 1] comp1Priorities;
+        bool[maxPriority + 1] comp2Priorities;
+        for (long ind = 0; ind < perCompartment; ind++) {
+            char comp1Item = comp1[ind];
+            char comp2Item = comp2[ind];
+
+            long getpriority(char ch) {
+                assert((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'));
+                long result = ch >= 'a' ? ch - 'a' + 1 : ch - 'A' + 27;
+                return result;
+            }
+
+            long comp1ItemPriority = getpriority(comp1Item);
+            long comp2ItemPriority = getpriority(comp2Item);
+
+            comp1Priorities[comp1ItemPriority] = true;
+            comp2Priorities[comp2ItemPriority] = true;
+
+            groupLinePriorities[curGroupLineIndex][comp1ItemPriority] = true;
+            groupLinePriorities[curGroupLineIndex][comp2ItemPriority] = true;
+        }
+
+        bool foundShared = false;
+        for (long priority = 1; priority <= maxPriority; priority++) {
+            bool incomp1 = comp1Priorities[priority];
+            bool incomp2 = comp2Priorities[priority];
+            if (incomp1 && incomp2) {
+                assert(!foundShared);
+                foundShared = true;
+                sharedItemsPrioritySum += priority;
+            }
+        }
+        assert(foundShared);
+
+        if (curGroupLineIndex == 2) {
+            import core.stdc.string : memset;
+
+            bool foundBadge = false;
+            for (long priority = 1; priority <= maxPriority; priority++) {
+                bool g0 = groupLinePriorities[0][priority];
+                bool g1 = groupLinePriorities[1][priority];
+                bool g2 = groupLinePriorities[2][priority];
+                if (g0 && g1 && g2) {
+                    assert(!foundBadge);
+                    foundBadge = true;
+                    badgePrioritySum += priority;
+                }
+            }
+            assert(foundBadge);
+
+            curGroupLineIndex = 0;
+            for (long i = 0; i < groupLinePriorities.length; i++) {
+                bool[] arr = groupLinePriorities[i];
+                memset(arr.ptr, 0, arr.length * arr[0].sizeof);
+            }
+        } else {
+            curGroupLineIndex += 1;
+        }
+    }
+    writeToStdout(fmt(fmt(sharedItemsPrioritySum), "\n", fmt(badgePrioritySum), "\n"));
 }
 
 T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
