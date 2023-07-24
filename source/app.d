@@ -1,8 +1,4 @@
-import core.sys.posix.sys.resource;
-
-void year2022day1() {
-    writeToStdout(__FUNCTION__ ~ "\n");
-    string input = getInput(__FUNCTION__);
+void year2022day1(string input) {
     LineRange lines = LineRange(input);
     long thisSum = 0;
     long maxSum = 0;
@@ -18,9 +14,7 @@ void year2022day1() {
     writeToStdout(fmt(fmt(maxSum), "\n"));
 }
 
-void year2022day2() {
-    writeToStdout(__FUNCTION__ ~ "\n");
-    string input = getInput(__FUNCTION__);
+void year2022day2(string input) {
     LineRange lines = LineRange(input);
     long scorePart1 = 0;
     long scorePart2 = 0;
@@ -75,9 +69,7 @@ void year2022day2() {
     writeToStdout(fmt(fmt(scorePart2), "\n"));
 }
 
-void year2022day3() {
-    writeToStdout(__FUNCTION__ ~ "\n");
-    string input = getInput(__FUNCTION__);
+void year2022day3(string input) {
     LineRange lines = LineRange(input);
 
     const long maxPriority = 52;
@@ -258,13 +250,6 @@ struct LineRange {
     }
 }
 
-string getInput(string functionName) {
-    string justName = functionName[__MODULE__.length + 1 .. functionName.length];
-    string inputPath = fmt("input/", justName, ".txt");
-    string content = readEntireFile(inputPath);
-    return content;
-}
-
 string fmt(long number) {
     assert(number >= 0);
     long maxpow10 = 1;
@@ -315,14 +300,29 @@ bool strstarts(string str, string prefix) {
     return result;
 }
 
-void callAllFunctionsThatStartWithYear() {
+long countAllFunctionsThatStartWithYear() {
+    long n = 0;
     static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
         static if (__traits(isStaticFunction, mixin(member))) {
             static if (strstarts(member.stringof, "\"year")) {
-                mixin(member, "();");
+                n += 1;
             }
         }
     }
+    return n;
+}
+
+string[countAllFunctionsThatStartWithYear()] getAllFunctionsThatStartWithYear() {
+    string[countAllFunctionsThatStartWithYear()] result;
+    long i = 0;
+    static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
+        static if (__traits(isStaticFunction, mixin(member))) {
+            static if (strstarts(member.stringof, "\"year")) {
+                result[i++] = member.stringof;
+            }
+        }
+    }
+    return result;
 }
 
 extern (C) int main() {
@@ -335,7 +335,17 @@ extern (C) int main() {
     }
 
     runTests();
-    callAllFunctionsThatStartWithYear();
+
+    static const string[countAllFunctionsThatStartWithYear()] functionsThatStartWithYear = getAllFunctionsThatStartWithYear();
+    static foreach (func; functionsThatStartWithYear) {
+        {
+            writeToStdout(func ~ "\n");
+            const string noquotes = func[1 .. func.length - 1];
+            string inputPath = fmt("input/", noquotes, ".txt");
+            string inputContent = readEntireFile(inputPath);
+            mixin(noquotes, "(inputContent);");
+        }
+    }
 
     return 0;
 }
@@ -528,4 +538,16 @@ void runTests() {
         assert(strSlice0 == "234567");
         assert(strSlice0.ptr[strSlice0.length] == 0);
     }
+}
+
+// NOTE(khvorov) This is from the D runtime.
+// Runtime should be disabled with -betterC 
+// but the call to this function is generated anyway which results in a link error.
+extern (C) void[]* _memset128ii(void[]* p, void[] value, size_t count) {
+    void[]* pstart = p;
+    void[]* ptop;
+
+    for (ptop = &p[count]; p < ptop; p++)
+        *p = value;
+    return pstart;
 }
