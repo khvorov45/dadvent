@@ -362,7 +362,8 @@ void writeToStdout(string msg) {
         import core.sys.windows.windef;
 
         DWORD written = 0;
-        assert(WriteFile(cast(HANDLE) STD_OUTPUT_HANDLE, msg.ptr, cast(uint) msg.length, &written, null));
+        BOOL writeFileResult = WriteFile(cast(HANDLE) STD_OUTPUT_HANDLE, msg.ptr, cast(uint) msg.length, &written, null);
+        assert(writeFileResult);
         assert(written == msg.length);
 
         string msg0 = tempNullTerm(msg);
@@ -430,7 +431,8 @@ string readEntireFile(string path) {
             CloseHandle(handle);
 
         DWORD bytesRead = 0;
-        assert(ReadFile(handle, ptr, cast(uint) globalMemory.arena.freesize, &bytesRead, null));
+        BOOL readFileResult = ReadFile(handle, ptr, cast(uint) globalMemory.arena.freesize, &bytesRead, null);
+        assert(readFileResult);
         size = bytesRead;
     }
 
