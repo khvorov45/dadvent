@@ -300,31 +300,6 @@ bool strstarts(string str, string prefix) {
     return result;
 }
 
-long countAllFunctionsThatStartWithYear() {
-    long n = 0;
-    static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
-        static if (__traits(isStaticFunction, mixin(member))) {
-            static if (strstarts(member.stringof, "\"year")) {
-                n += 1;
-            }
-        }
-    }
-    return n;
-}
-
-string[countAllFunctionsThatStartWithYear()] getAllFunctionsThatStartWithYear() {
-    string[countAllFunctionsThatStartWithYear()] result;
-    long i = 0;
-    static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
-        static if (__traits(isStaticFunction, mixin(member))) {
-            static if (strstarts(member.stringof, "\"year")) {
-                result[i++] = member.stringof;
-            }
-        }
-    }
-    return result;
-}
-
 extern (Windows) int WinMain() {
     {
         long size = 1 * 1024 * 1024 * 1024;
@@ -336,14 +311,17 @@ extern (Windows) int WinMain() {
 
     runTests();
 
-    static const string[countAllFunctionsThatStartWithYear()] functionsThatStartWithYear = getAllFunctionsThatStartWithYear();
-    static foreach (func; functionsThatStartWithYear) {
-        {
-            writeToStdout(func ~ "\n");
-            const string noquotes = func[1 .. func.length - 1];
-            string inputPath = fmt("input/", noquotes, ".txt");
-            string inputContent = readEntireFile(inputPath);
-            mixin(noquotes, "(inputContent);");
+    static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
+        static if (__traits(isStaticFunction, mixin(member))) {
+            static if (strstarts(member.stringof, "\"year")) {
+                {
+                    writeToStdout(member.stringof ~ "\n");
+                    static const string noquotes = member.stringof[1 .. member.stringof.length - 1];
+                    static const string inputPath = "input/" ~ noquotes ~ ".txt";
+                    string inputContent = readEntireFile(inputPath);
+                    mixin(noquotes, "(inputContent);");
+                }
+            }
         }
     }
 
