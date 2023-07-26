@@ -325,7 +325,7 @@ string[countAllFunctionsThatStartWithYear()] getAllFunctionsThatStartWithYear() 
     return result;
 }
 
-extern (C) int main() {
+extern (Windows) int WinMain() {
     {
         long size = 1 * 1024 * 1024 * 1024;
         void* ptr = allocvmem(size);
@@ -363,8 +363,9 @@ void writeToStdout(string msg) {
 
         DWORD written = 0;
         BOOL writeFileResult = WriteFile(cast(HANDLE) STD_OUTPUT_HANDLE, msg.ptr, cast(uint) msg.length, &written, null);
-        assert(writeFileResult);
-        assert(written == msg.length);
+        if (writeFileResult) {
+            assert(written == msg.length);
+        }
 
         string msg0 = tempNullTerm(msg);
         OutputDebugStringA(msg0.ptr);
