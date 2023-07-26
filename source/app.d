@@ -196,7 +196,7 @@ void[] talloc(long size) => alloc(globalMemory.circularBuffer, size);
 string tempNullTerm(string str) {
     import core.stdc.string;
 
-    char[] buf = cast(char[]) talloc(str.length + 1);
+    char[] buf = cast(char[])talloc(str.length + 1);
     memcpy(buf.ptr, str.ptr, str.length);
     buf[str.length] = 0;
 
@@ -259,7 +259,7 @@ string fmt(long number) {
         digitCount += 1;
     }
 
-    char[] buf = cast(char[]) alloc(digitCount);
+    char[] buf = cast(char[])alloc(digitCount);
     long curnumber = number;
     long curDigitInd = 0;
     for (long curpow10 = maxpow10; curpow10; curpow10 /= 10) {
@@ -267,27 +267,27 @@ string fmt(long number) {
         assert(digit >= 0 && digit <= 9);
         curnumber -= digit * curpow10;
 
-        char ch = cast(char)((cast(char) digit) + '0');
+        char ch = cast(char)((cast(char)digit) + '0');
         buf[curDigitInd] = ch;
         curDigitInd += 1;
     }
 
-    string result = cast(string) buf;
+    string result = cast(string)buf;
     return result;
 }
 
 string fmt(string[] arr...) {
-    char* ptr = cast(char*) globalMemory.arena.freeptr;
+    char* ptr = cast(char*)globalMemory.arena.freeptr;
     long len = 0;
     foreach (arg; arr) {
         import core.stdc.string;
 
-        char[] thisArg = cast(char[]) alloc(arg.length);
+        char[] thisArg = cast(char[])alloc(arg.length);
         memcpy(thisArg.ptr, arg.ptr, arg.length);
 
         len += arg.length;
     }
-    string result = cast(string) ptr[0 .. len];
+    string result = cast(string)ptr[0 .. len];
     return result;
 }
 
@@ -300,7 +300,12 @@ bool strstarts(string str, string prefix) {
     return result;
 }
 
-extern (Windows) int WinMain() {
+// TODO(khvorov) Guard platform-specific code
+
+pragma(lib, "User32.lib");
+pragma(lib, "Gdi32.lib");
+
+extern (Windows) int WinMain(void* instance) {
     {
         long size = 1 * 1024 * 1024 * 1024;
         void* ptr = allocvmem(size);
@@ -310,6 +315,53 @@ extern (Windows) int WinMain() {
     }
 
     runTests();
+
+    {
+        import core.sys.windows.winuser;
+        import core.sys.windows.wingdi : GetStockObject, BLACK_BRUSH;
+        import core.sys.windows.windef : ATOM, HWND, HBRUSH;
+
+        // TODO(khvorov) Convert to *W functions
+        string className = "dadventWindowClass";
+
+        WNDCLASSEXA windowClass = {
+            cbSize: WNDCLASSEXA.sizeof,
+            style: 0,
+            lpfnWndProc: &DefWindowProcA,
+            cbClsExtra: 0,
+            cbWndExtra: 0,
+            hInstance: instance,
+            hIcon: null,
+            hCursor: null,
+            hbrBackground: cast(HBRUSH)GetStockObject(BLACK_BRUSH),
+            lpszMenuName: null,
+            lpszClassName: className.ptr,
+            hIconSm: null,
+        };
+
+        ATOM registerClassResult = RegisterClassExA(&windowClass);
+        assert(registerClassResult);
+
+        string windowName = "dadvent";
+
+        HWND hwnd = CreateWindowExA(
+            0,
+            className.ptr,
+            windowName.ptr,
+            WS_OVERLAPPED,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            1000,
+            1000,
+            null,
+            null,
+            instance,
+            null,
+        );
+        assert(hwnd);
+
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+    }
 
     static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
         static if (__traits(isStaticFunction, mixin(member))) {
@@ -340,7 +392,7 @@ void writeToStdout(string msg) {
         import core.sys.windows.windef;
 
         DWORD written = 0;
-        BOOL writeFileResult = WriteFile(cast(HANDLE) STD_OUTPUT_HANDLE, msg.ptr, cast(uint) msg.length, &written, null);
+        BOOL writeFileResult = WriteFile(cast(HANDLE)STD_OUTPUT_HANDLE, msg.ptr, cast(uint)msg.length, &written, null);
         if (writeFileResult) {
             assert(written == msg.length);
         }
@@ -373,7 +425,7 @@ void* allocvmem(long size) {
 
 string readEntireFile(string path) {
     string content = "";
-    char* ptr = cast(char*) globalMemory.arena.freeptr;
+    char* ptr = cast(char*)globalMemory.arena.freeptr;
     long size = 0;
 
     string path0 = tempNullTerm(path);
@@ -382,7 +434,7 @@ string readEntireFile(string path) {
         import core.sys.posix.fcntl;
         import core.sys.posix.unistd;
 
-        int fd = open(cast(char*) path0.ptr, O_RDONLY);
+        int fd = open(cast(char*)path0.ptr, O_RDONLY);
         assert(fd != -1, "could not open file");
         scope (exit)
             close(fd);
@@ -410,14 +462,14 @@ string readEntireFile(string path) {
             CloseHandle(handle);
 
         DWORD bytesRead = 0;
-        BOOL readFileResult = ReadFile(handle, ptr, cast(uint) globalMemory.arena.freesize, &bytesRead, null);
+        BOOL readFileResult = ReadFile(handle, ptr, cast(uint)globalMemory.arena.freesize, &bytesRead, null);
         assert(readFileResult);
         size = bytesRead;
     }
 
     globalMemory.arena.used = globalMemory.arena.used + size;
 
-    content = cast(string) ptr[0 .. size];
+    content = cast(string)ptr[0 .. size];
     return content;
 }
 
@@ -500,7 +552,7 @@ void runTests() {
     }
 
     {
-        string wholeString = cast(string) globalMemory.arena.freeptr[0 .. 6];
+        string wholeString = cast(string)globalMemory.arena.freeptr[0 .. 6];
         assert(fmt(0) == "0");
         assert(fmt(5) == "5");
         assert(fmt(1234) == "1234");
