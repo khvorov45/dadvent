@@ -2,5 +2,7 @@
 	"name": "dadvent",
 	"targetPath": "build",
 	"lflags": ["/incremental:no"],
+	"targetType": "executable",
+	"mainSourceFile": "source/dadvent.d",
 	"buildOptions": ["betterC"]
 }
