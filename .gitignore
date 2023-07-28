@@ -17,3 +17,4 @@ dadvent-test-*
 .vscode
 *.rdbg
 build/*
+.tasks
