@@ -23,6 +23,7 @@ extern (Windows) int WinMain(void* instance) {
 
     runTests();
 
+    HWND hwnd;
     {
         wchar[] className = cast(wchar[])"dadventWindowClass";
 
@@ -34,7 +35,7 @@ extern (Windows) int WinMain(void* instance) {
             cbWndExtra: 0,
             hInstance: instance,
             hIcon: null,
-            hCursor: null,
+            hCursor: LoadCursorA(null, cast(char*)32512),
             hbrBackground: cast(HBRUSH)GetStockObject(BLACK_BRUSH),
             lpszMenuName: null,
             lpszClassName: className.ptr,
@@ -46,11 +47,11 @@ extern (Windows) int WinMain(void* instance) {
 
         wchar[] windowName = cast(wchar[])"dadvent";
 
-        HWND hwnd = CreateWindowExW(
-            0,
+        hwnd = CreateWindowExW(
+            WS_EX_APPWINDOW,
             className.ptr,
             windowName.ptr,
-            WS_OVERLAPPED,
+            WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             500,
@@ -78,6 +79,23 @@ extern (Windows) int WinMain(void* instance) {
     {
         long[2] result = year2022day3(globalInputYear2022day3);
         writeToStdout(fmt(fmt(result[0]), " ", fmt(result[1]), "\n"));
+    }
+
+    mainloop: for (;;) {
+        MSG message;
+        if (GetMessageA(&message, hwnd, 0, 0) == -1) {
+            break mainloop;
+        }
+
+        switch (message.message) {
+        case WM_QUIT:
+            break mainloop;
+
+        default:
+            TranslateMessage(&message);
+            DispatchMessageA(&message);
+            break;
+        }
     }
 
     return 0;
