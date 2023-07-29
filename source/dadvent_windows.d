@@ -1,6 +1,7 @@
 module dadvent_windows;
 
 import dadvent;
+import input;
 
 import core.sys.windows.winbase;
 import core.sys.windows.winnt;
@@ -65,23 +66,18 @@ extern (Windows) int WinMain(void* instance) {
         ShowWindow(hwnd, SW_SHOWNORMAL);
     }
 
-    // TODO(khvorov) Embed input?
-
     {
-        string input = readEntireFile("input/year2022day1.txt");
-        long result = year2022day1(input);
+        long result = year2022day1(globalInputYear2022day1);
         writeToStdout(fmt(fmt(result), "\n"));
     }
 
     {
-        string input = readEntireFile("input/year2022day2.txt");
-        long[2] result = year2022day2(input);
+        long[2] result = year2022day2(globalInputYear2022day2);
         writeToStdout(fmt(fmt(result[0]), " ", fmt(result[1]), "\n"));
     }
 
     {
-        string input = readEntireFile("input/year2022day3.txt");
-        long[2] result = year2022day3(input);
+        long[2] result = year2022day3(globalInputYear2022day3);
         writeToStdout(fmt(fmt(result[0]), " ", fmt(result[1]), "\n"));
     }
 
