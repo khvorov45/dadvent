@@ -24,13 +24,12 @@ extern (Windows) int WinMain(void* instance) {
     runTests();
 
     {
-        // TODO(khvorov) Convert to *W functions
-        string className = "dadventWindowClass";
+        wchar[] className = cast(wchar[])"dadventWindowClass";
 
-        WNDCLASSEXA windowClass = {
-            cbSize: WNDCLASSEXA.sizeof,
+        WNDCLASSEXW windowClass = {
+            cbSize: WNDCLASSEXW.sizeof,
             style: 0,
-            lpfnWndProc: &DefWindowProcA,
+            lpfnWndProc: &DefWindowProcW,
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: instance,
@@ -42,20 +41,20 @@ extern (Windows) int WinMain(void* instance) {
             hIconSm: null,
         };
 
-        ATOM registerClassResult = RegisterClassExA(&windowClass);
+        ATOM registerClassResult = RegisterClassExW(&windowClass);
         assert(registerClassResult);
 
-        string windowName = "dadvent";
+        wchar[] windowName = cast(wchar[])"dadvent";
 
-        HWND hwnd = CreateWindowExA(
+        HWND hwnd = CreateWindowExW(
             0,
             className.ptr,
             windowName.ptr,
             WS_OVERLAPPED,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            1000,
-            1000,
+            500,
+            500,
             null,
             null,
             instance,
