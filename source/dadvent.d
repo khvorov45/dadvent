@@ -1,4 +1,6 @@
-void year2022day1(string input) {
+module dadvent;
+
+long year2022day1(string input) {
     LineRange lines = LineRange(input);
     long thisSum = 0;
     long maxSum = 0;
@@ -11,10 +13,10 @@ void year2022day1(string input) {
             thisSum = 0;
         }
     }
-    writeToStdout(fmt(fmt(maxSum), "\n"));
+    return maxSum;
 }
 
-void year2022day2(string input) {
+long[2] year2022day2(string input) {
     LineRange lines = LineRange(input);
     long scorePart1 = 0;
     long scorePart2 = 0;
@@ -65,11 +67,12 @@ void year2022day2(string input) {
         scorePart1 += scoreOutcomePart1 + choice2Part1 + 1;
         scorePart2 += scoreOutcomePart2 + choice2Part2 + 1;
     }
-    writeToStdout(fmt(fmt(scorePart1), "\n"));
-    writeToStdout(fmt(fmt(scorePart2), "\n"));
+
+    long[2] result = [scorePart1, scorePart2];
+    return result;
 }
 
-void year2022day3(string input) {
+long[2] year2022day3(string input) {
     LineRange lines = LineRange(input);
 
     const long maxPriority = 52;
@@ -143,7 +146,9 @@ void year2022day3(string input) {
             curGroupLineIndex += 1;
         }
     }
-    writeToStdout(fmt(fmt(sharedItemsPrioritySum), "\n", fmt(badgePrioritySum), "\n"));
+
+    long[2] result = [sharedItemsPrioritySum, badgePrioritySum];
+    return result;
 }
 
 T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
@@ -298,179 +303,6 @@ bool strstarts(string str, string prefix) {
     string strshorter = str[0 .. prefix.length];
     bool result = strshorter == prefix;
     return result;
-}
-
-// TODO(khvorov) Guard platform-specific code
-
-pragma(lib, "User32.lib");
-pragma(lib, "Gdi32.lib");
-
-extern (Windows) int WinMain(void* instance) {
-    {
-        long size = 1 * 1024 * 1024 * 1024;
-        void* ptr = allocvmem(size);
-        globalMemory.arena = Arena(ptr[0 .. size]);
-        void[] buf = alloc(globalMemory.arena.buf.length / 2);
-        globalMemory.circularBuffer = CircularBuffer(Arena(buf));
-    }
-
-    runTests();
-
-    {
-        import core.sys.windows.winuser;
-        import core.sys.windows.wingdi : GetStockObject, BLACK_BRUSH;
-        import core.sys.windows.windef : ATOM, HWND, HBRUSH;
-
-        // TODO(khvorov) Convert to *W functions
-        string className = "dadventWindowClass";
-
-        WNDCLASSEXA windowClass = {
-            cbSize: WNDCLASSEXA.sizeof,
-            style: 0,
-            lpfnWndProc: &DefWindowProcA,
-            cbClsExtra: 0,
-            cbWndExtra: 0,
-            hInstance: instance,
-            hIcon: null,
-            hCursor: null,
-            hbrBackground: cast(HBRUSH)GetStockObject(BLACK_BRUSH),
-            lpszMenuName: null,
-            lpszClassName: className.ptr,
-            hIconSm: null,
-        };
-
-        ATOM registerClassResult = RegisterClassExA(&windowClass);
-        assert(registerClassResult);
-
-        string windowName = "dadvent";
-
-        HWND hwnd = CreateWindowExA(
-            0,
-            className.ptr,
-            windowName.ptr,
-            WS_OVERLAPPED,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            1000,
-            1000,
-            null,
-            null,
-            instance,
-            null,
-        );
-        assert(hwnd);
-
-        ShowWindow(hwnd, SW_SHOWNORMAL);
-    }
-
-    static foreach (member; __traits(allMembers, mixin(__MODULE__))) {
-        static if (__traits(isStaticFunction, mixin(member))) {
-            static if (strstarts(member.stringof, "\"year")) {
-                {
-                    writeToStdout(member.stringof ~ "\n");
-                    static const string noquotes = member.stringof[1 .. member.stringof.length - 1];
-                    static const string inputPath = "input/" ~ noquotes ~ ".txt";
-                    string inputContent = readEntireFile(inputPath);
-                    mixin(noquotes, "(inputContent);");
-                }
-            }
-        }
-    }
-
-    return 0;
-}
-
-void writeToStdout(string msg) {
-    version (linux) {
-        import core.sys.posix.unistd;
-
-        write(STDOUT_FILENO, msg.ptr, msg.length);
-    }
-
-    version (Windows) {
-        import core.sys.windows.winbase;
-        import core.sys.windows.windef;
-
-        DWORD written = 0;
-        BOOL writeFileResult = WriteFile(cast(HANDLE)STD_OUTPUT_HANDLE, msg.ptr, cast(uint)msg.length, &written, null);
-        if (writeFileResult) {
-            assert(written == msg.length);
-        }
-
-        string msg0 = tempNullTerm(msg);
-        OutputDebugStringA(msg0.ptr);
-    }
-}
-
-void* allocvmem(long size) {
-    void* ptr = null;
-
-    version (linux) {
-        import core.sys.posix.sys.mman;
-
-        ptr = mmap(null, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, 0, 0);
-        assert(ptr != MAP_FAILED);
-    }
-
-    version (Windows) {
-        import core.sys.windows.winbase;
-        import core.sys.windows.winnt;
-
-        ptr = VirtualAlloc(null, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-        assert(ptr);
-    }
-
-    return ptr;
-}
-
-string readEntireFile(string path) {
-    string content = "";
-    char* ptr = cast(char*)globalMemory.arena.freeptr;
-    long size = 0;
-
-    string path0 = tempNullTerm(path);
-
-    version (linux) {
-        import core.sys.posix.fcntl;
-        import core.sys.posix.unistd;
-
-        int fd = open(cast(char*)path0.ptr, O_RDONLY);
-        assert(fd != -1, "could not open file");
-        scope (exit)
-            close(fd);
-
-        ssize_t readRes = read(fd, ptr, globalMemory.arena.free.length);
-        assert(readRes != -1, "could not read file");
-        size = readRes;
-    }
-
-    version (Windows) {
-        import core.sys.windows.winbase;
-        import core.sys.windows.winnt;
-
-        HANDLE handle = CreateFileA(
-            path0.ptr,
-            GENERIC_READ,
-            FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
-            null,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            null,
-        );
-        assert(handle != INVALID_HANDLE_VALUE);
-        scope (exit)
-            CloseHandle(handle);
-
-        DWORD bytesRead = 0;
-        BOOL readFileResult = ReadFile(handle, ptr, cast(uint)globalMemory.arena.freesize, &bytesRead, null);
-        assert(readFileResult);
-        size = bytesRead;
-    }
-
-    globalMemory.arena.used = globalMemory.arena.used + size;
-
-    content = cast(string)ptr[0 .. size];
-    return content;
 }
 
 void runTests() {
