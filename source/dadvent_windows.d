@@ -1,6 +1,7 @@
 module dadvent_windows;
 
 import dadvent;
+import dadvent_d3d11;
 import input;
 
 import core.sys.windows.winbase;
@@ -9,10 +10,10 @@ import core.sys.windows.winuser;
 import core.sys.windows.wingdi;
 import core.sys.windows.windef;
 
-pragma(lib, "User32.lib");
-pragma(lib, "Gdi32.lib");
+pragma(lib, "User32");
+pragma(lib, "Gdi32");
 
-extern (Windows) int WinMain(void* instance) {
+extern (Windows) int WinMain(HINSTANCE instance) {
     {
         long size = 1 * 1024 * 1024 * 1024;
         void* ptr = allocvmem(size);
@@ -23,7 +24,13 @@ extern (Windows) int WinMain(void* instance) {
 
     runTests();
 
-    HWND hwnd;
+    struct Window {
+        HWND hwnd;
+        long width;
+        long height;
+    }
+
+    Window window;
     {
         wchar[] className = cast(wchar[])"dadventWindowClass";
 
@@ -35,7 +42,7 @@ extern (Windows) int WinMain(void* instance) {
             cbWndExtra: 0,
             hInstance: instance,
             hIcon: null,
-            hCursor: LoadCursorA(null, cast(char*)32512),
+            hCursor: LoadCursorW(null, IDC_ARROW),
             hbrBackground: cast(HBRUSH)GetStockObject(BLACK_BRUSH),
             lpszMenuName: null,
             lpszClassName: className.ptr,
@@ -47,24 +54,29 @@ extern (Windows) int WinMain(void* instance) {
 
         wchar[] windowName = cast(wchar[])"dadvent";
 
-        hwnd = CreateWindowExW(
+        window.width = 500;
+        window.height = 500;
+        window.hwnd = CreateWindowExW(
             WS_EX_APPWINDOW,
             className.ptr,
             windowName.ptr,
             WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            500,
-            500,
+            cast(int)window.width,
+            cast(int)window.height,
             null,
             null,
             instance,
             null,
         );
-        assert(hwnd);
+        assert(window.hwnd);
 
-        ShowWindow(hwnd, SW_SHOWNORMAL);
+        ShowWindow(window.hwnd, SW_SHOWNORMAL);
     }
+
+    D3D11Renderer* d3d11Context = cast(D3D11Renderer*)alloc(D3D11Renderer.sizeof).ptr;
+    initD3D11Context(d3d11Context, window.width, window.height);
 
     {
         long result = year2022day1(globalInputYear2022day1);
@@ -83,7 +95,7 @@ extern (Windows) int WinMain(void* instance) {
 
     mainloop: for (;;) {
         MSG message;
-        if (GetMessageA(&message, hwnd, 0, 0) == -1) {
+        if (GetMessageA(&message, window.hwnd, 0, 0) == -1) {
             break mainloop;
         }
 
