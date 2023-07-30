@@ -9,8 +9,8 @@ struct D3D11Renderer {
     ID3D11DeviceContext* context;
 }
 
-// TODO(khvorov) Make renderer a ref?
-void initD3D11Context(D3D11Renderer* renderer, long width, long height) {
+D3D11Renderer createD3D11Context(long width, long height) {
+    D3D11Renderer renderer;
 
     // NOTE(khvorov) D3D11 device and context
     {
@@ -59,4 +59,6 @@ void initD3D11Context(D3D11Renderer* renderer, long width, long height) {
     //     pRestrictToOutput: 0,
     //     ppSwapChain: 0
     // );
+
+    return renderer;
 }

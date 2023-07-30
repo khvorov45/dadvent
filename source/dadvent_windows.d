@@ -75,8 +75,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         ShowWindow(window.hwnd, SW_SHOWNORMAL);
     }
 
-    D3D11Renderer* d3d11Context = cast(D3D11Renderer*)alloc(D3D11Renderer.sizeof).ptr;
-    initD3D11Context(d3d11Context, window.width, window.height);
+    D3D11Renderer d3d11Context = createD3D11Context(window.width, window.height);
 
     {
         long result = year2022day1(globalInputYear2022day1);
