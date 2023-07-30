@@ -75,7 +75,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         ShowWindow(window.hwnd, SW_SHOWNORMAL);
     }
 
-    D3D11Renderer d3d11Context = createD3D11Context(window.width, window.height);
+    D3D11Renderer d3d11Renderer = D3D11Renderer(window.width, window.height);
 
     {
         long result = year2022day1(globalInputYear2022day1);
@@ -109,6 +109,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         }
     }
 
+    d3d11Renderer.destroy();
     return 0;
 }
 
