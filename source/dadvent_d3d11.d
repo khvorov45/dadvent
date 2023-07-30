@@ -14,12 +14,15 @@ struct D3D11Renderer {
         {
             D3D_FEATURE_LEVEL[1] levels = [D3D_FEATURE_LEVEL_11_0];
 
+            uint flags = 0;
+            debug flags = D3D11_CREATE_DEVICE_DEBUG;
+
             // dfmt off
             HRESULT D3D11CreateDeviceResult = D3D11CreateDevice(
                 pAdapter: null,
                 DriverType: D3D_DRIVER_TYPE_HARDWARE,
                 Software: null,
-                Flags: D3D11_CREATE_DEVICE_DEBUG, // TODO(khvorov) Debug guard
+                Flags: flags,
                 pFeatureLevels: levels.ptr,
                 FeatureLevels: levels.length,
                 SDKVersion: 7,
