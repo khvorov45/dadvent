@@ -6,12 +6,22 @@ pragma(lib, "d3d11");
 pragma(lib, "dxguid");
 
 struct D3D11Renderer {
+    struct Window {
+        HWND hwnd;
+        int width;
+        int height;
+    }
+
+    Window window;
+
     ID3D11Device* device;
     ID3D11DeviceContext* context;
     IDXGISwapChain1* swapchain;
+    ID3D11RenderTargetView* rtview;
 
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
-    this(void* hwnd) {
+    this(void* hwnd_) {
+        window.hwnd = cast(HWND)hwnd_;
 
         // NOTE(khvorov) D3D11 device and context
         {
@@ -111,7 +121,7 @@ struct D3D11Renderer {
             HRESULT CreateSwapChainForHwndResult = dxgiFactory.lpVtbl.CreateSwapChainForHwnd(
                 This: dxgiFactory,
                 pDevice: cast(IUnknown*)device,
-                hWnd: cast(HWND)hwnd,
+                hWnd: window.hwnd,
                 pDesc: &desc,
                 pFullscreenDesc: null,
                 pRestrictToOutput: null,
@@ -122,7 +132,7 @@ struct D3D11Renderer {
 
             const uint DXGI_MWA_NO_ALT_ENTER = 1 << 1;
             HRESULT MakeWindowAssociationResult =
-                dxgiFactory.lpVtbl.MakeWindowAssociation(dxgiFactory, cast(HWND)hwnd, DXGI_MWA_NO_ALT_ENTER);
+                dxgiFactory.lpVtbl.MakeWindowAssociation(dxgiFactory, window.hwnd, DXGI_MWA_NO_ALT_ENTER);
             assert(MakeWindowAssociationResult == 0);
 
             dxgiDevice.lpVtbl.Release(dxgiDevice);
@@ -135,5 +145,71 @@ struct D3D11Renderer {
         device.lpVtbl.Release(device);
         context.lpVtbl.Release(context);
         swapchain.lpVtbl.Release(swapchain);
+        if (rtview) {
+            rtview.lpVtbl.Release(rtview);
+        }
+    }
+
+    void draw() {
+        {
+            RECT rect;
+            BOOL GetClientRectResult = GetClientRect(window.hwnd, &rect);
+            if (GetClientRectResult) {
+                int width = rect.right - rect.left;
+                int height = rect.bottom - rect.top;
+
+                if (rtview == null || width != window.width || height != window.height) {
+                    if (rtview) {
+                        context.lpVtbl.ClearState(context);
+                        rtview.lpVtbl.Release(rtview);
+                        rtview = null;
+                    }
+
+                    if (width != 0 && height != 0) {
+                        HRESULT ResizeBuffersResult = swapchain.lpVtbl.ResizeBuffers(swapchain, 0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+                        assert(ResizeBuffersResult == 0);
+
+                        ID3D11Texture2D* backbuffer;
+                        HRESULT GetBufferResult = swapchain.lpVtbl.GetBuffer(
+                            swapchain, 0, &IID_ID3D11Texture2D, cast(void**)&backbuffer
+                        );
+                        assert(GetBufferResult == 0);
+                        assert(backbuffer);
+
+                        HRESULT CreateRenderTargetViewResult = device.lpVtbl.CreateRenderTargetView(
+                            device, cast(ID3D11Resource*)backbuffer, null, &rtview
+                        );
+                        assert(CreateRenderTargetViewResult == 0);
+                        assert(rtview);
+
+                        backbuffer.lpVtbl.Release(backbuffer);
+                    }
+
+                    window.width = width;
+                    window.height = height;
+                }
+            }
+        }
+
+        if (rtview) {
+            assert(window.width != 0 && window.height != 0);
+
+            // TODO(khvorov) Do we need maxdepth even if we are not using depth?
+            D3D11_VIEWPORT viewport = {
+                Width: window.width,
+                Height: window.height,
+            };
+
+            float[4] color = [0.1, 0.1, 0.1, 1];
+            context.lpVtbl.ClearRenderTargetView(context, rtview, &color[0]);
+
+            HRESULT PresentResult = swapchain.lpVtbl.Present(swapchain, 1, 0);
+            const HRESULT DXGI_STATUS_OCCLUDED = 0x087A0001L;
+            if (PresentResult == DXGI_STATUS_OCCLUDED) {
+                Sleep(10);
+            } else {
+                assert(PresentResult == 0);
+            }
+        }
     }
 }

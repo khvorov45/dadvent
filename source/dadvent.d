@@ -405,12 +405,22 @@ void runTests() {
     }
 }
 
-// NOTE(khvorov) This is from the D runtime.
+// NOTE(khvorov) The below is from the D runtime.
 // Runtime should be disabled with -betterC 
 // but the call to this function is generated anyway which results in a link error.
+
 extern (C) void[]* _memset128ii(void[]* p, void[] value, size_t count) {
     void[]* pstart = p;
     void[]* ptop;
+
+    for (ptop = &p[count]; p < ptop; p++)
+        *p = value;
+    return pstart;
+}
+
+extern (C) float* _memsetFloat(float* p, float value, size_t count) {
+    float* pstart = p;
+    float* ptop;
 
     for (ptop = &p[count]; p < ptop; p++)
         *p = value;
