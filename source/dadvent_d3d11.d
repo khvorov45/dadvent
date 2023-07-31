@@ -8,9 +8,10 @@ pragma(lib, "dxguid");
 struct D3D11Renderer {
     ID3D11Device* device;
     ID3D11DeviceContext* context;
+    IDXGISwapChain1* swapchain;
 
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
-    this(long width, long height) {
+    this(void* hwnd) {
 
         // NOTE(khvorov) D3D11 device and context
         {
@@ -19,6 +20,7 @@ struct D3D11Renderer {
             uint flags = 0;
             debug flags = D3D11_CREATE_DEVICE_DEBUG;
 
+            const uint D3D11_SDK_VERSION = 7;
             // dfmt off
             HRESULT D3D11CreateDeviceResult = D3D11CreateDevice(
                 pAdapter: null,
@@ -27,7 +29,7 @@ struct D3D11Renderer {
                 Flags: flags,
                 pFeatureLevels: levels.ptr,
                 FeatureLevels: levels.length,
-                SDKVersion: 7,
+                SDKVersion: D3D11_SDK_VERSION,
                 ppDevice: &device,
                 pFeatureLevel: null,
                 ppImmediateContext: &context,
@@ -81,35 +83,57 @@ struct D3D11Renderer {
             }
         }
 
-        IDXGIDevice* dxgiDevice;
+        {
+            IDXGIDevice* dxgiDevice;
+            HRESULT QueryInterfaceResult =
+                device.lpVtbl.QueryInterface(device, &IID_IDXGIDevice, cast(void**)&dxgiDevice);
+            assert(QueryInterfaceResult == 0);
 
-        IDXGIAdapter* dxgiAdapter;
+            IDXGIAdapter* dxgiAdapter;
+            HRESULT GetAdapterResult = dxgiDevice.lpVtbl.GetAdapter(dxgiDevice, &dxgiAdapter);
+            assert(GetAdapterResult == 0);
 
-        IDXGIFactory2* dxgiFactory;
+            IDXGIFactory2* dxgiFactory;
+            HRESULT GetParentResult =
+                dxgiAdapter.lpVtbl.GetParent(dxgiAdapter, &IID_IDXGIFactory2, cast(void**)&dxgiFactory);
+            assert(GetParentResult == 0);
 
-        DXGI_SWAP_CHAIN_DESC1 desc = {
-            Width: cast(uint)width,
-            Height: cast(uint)height,
-            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-            SampleDesc: {Count: 1},
-            BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
-            BufferCount: 2,
-            Scaling: DXGI_SCALING_NONE,
-            SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
-        };
+            DXGI_SWAP_CHAIN_DESC1 desc = {
+                Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+                SampleDesc: {Count: 1},
+                BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
+                BufferCount: 2,
+                Scaling: DXGI_SCALING_NONE,
+                SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
+            };
 
-        // HRESULT CreateSwapChainForHwndResult = CreateSwapChainForHwnd(
-        //     pDevice: 0,
-        //     hWnd: 0,
-        //     pDesc: 0,
-        //     pFullscreenDesc: 0,
-        //     pRestrictToOutput: 0,
-        //     ppSwapChain: 0
-        // );
+            // dfmt off
+            HRESULT CreateSwapChainForHwndResult = dxgiFactory.lpVtbl.CreateSwapChainForHwnd(
+                This: dxgiFactory,
+                pDevice: cast(IUnknown*)device,
+                hWnd: cast(HWND)hwnd,
+                pDesc: &desc,
+                pFullscreenDesc: null,
+                pRestrictToOutput: null,
+                ppSwapChain: &swapchain
+            );
+            // dfmt on
+            assert(CreateSwapChainForHwndResult == 0);
+
+            const uint DXGI_MWA_NO_ALT_ENTER = 1 << 1;
+            HRESULT MakeWindowAssociationResult =
+                dxgiFactory.lpVtbl.MakeWindowAssociation(dxgiFactory, cast(HWND)hwnd, DXGI_MWA_NO_ALT_ENTER);
+            assert(MakeWindowAssociationResult == 0);
+
+            dxgiDevice.lpVtbl.Release(dxgiDevice);
+            dxgiAdapter.lpVtbl.Release(dxgiAdapter);
+            dxgiFactory.lpVtbl.Release(dxgiFactory);
+        }
     }
 
     void destroy() {
         device.lpVtbl.Release(device);
         context.lpVtbl.Release(context);
+        swapchain.lpVtbl.Release(swapchain);
     }
 }

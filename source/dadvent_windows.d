@@ -57,7 +57,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         window.width = 500;
         window.height = 500;
         window.hwnd = CreateWindowExW(
-            WS_EX_APPWINDOW,
+            WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP,
             className.ptr,
             windowName.ptr,
             WS_OVERLAPPEDWINDOW,
@@ -75,7 +75,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         ShowWindow(window.hwnd, SW_SHOWNORMAL);
     }
 
-    D3D11Renderer d3d11Renderer = D3D11Renderer(window.width, window.height);
+    D3D11Renderer d3d11Renderer = D3D11Renderer(window.hwnd);
 
     {
         long result = year2022day1(globalInputYear2022day1);
