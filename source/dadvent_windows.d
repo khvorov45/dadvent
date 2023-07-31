@@ -108,7 +108,6 @@ extern (Windows) int WinMain(HINSTANCE instance) {
             break;
         }
 
-        // TODO(khvorov) Paint in window proc?
         d3d11Renderer.draw();
     }
 
