@@ -4,5 +4,6 @@
 	"lflags": ["/incremental:no"],
 	"targetType": "executable",
 	"mainSourceFile": "source/dadvent_windows.d",
+	"dflags": ["-checkaction=halt"],
 	"buildOptions": ["betterC"]
 }
