@@ -1,6 +1,7 @@
 module dadvent_d3d11;
 
 import sysd3d11;
+import shader_vs;
 
 pragma(lib, "d3d11");
 pragma(lib, "dxguid");
@@ -18,6 +19,7 @@ struct D3D11Renderer {
     ID3D11DeviceContext* context;
     IDXGISwapChain1* swapchain;
     ID3D11RenderTargetView* rtview;
+    ID3D11Buffer* vbuffer;
 
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
     this(void* hwnd_) {
@@ -93,6 +95,7 @@ struct D3D11Renderer {
             }
         }
 
+        // NOTE(khvorov) Swapchain
         {
             IDXGIDevice* dxgiDevice;
             HRESULT QueryInterfaceResult =
@@ -139,6 +142,24 @@ struct D3D11Renderer {
             dxgiAdapter.lpVtbl.Release(dxgiAdapter);
             dxgiFactory.lpVtbl.Release(dxgiFactory);
         }
+
+        // NOTE(khvorov) Vertex buffer
+        {
+            float[2][3] data = [[-1, -1], [0, 1], [1, -1]];
+
+            D3D11_BUFFER_DESC desc = {
+                ByteWidth: data.sizeof,
+                Usage: D3D11_USAGE_IMMUTABLE,
+                BindFlags: D3D11_BIND_VERTEX_BUFFER,
+            };
+
+            D3D11_SUBRESOURCE_DATA dataSubresource = {pSysMem: &data[0][0]};
+            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, &dataSubresource, &vbuffer);
+            assert(CreateBufferResult == 0);
+        }
+
+        // TODO(khvorov) Shaders
+        const char[] temp = globalCompiledShader_shader_vs[0 .. globalCompiledShader_shader_vs.length];
     }
 
     void destroy() {
@@ -148,6 +169,7 @@ struct D3D11Renderer {
         if (rtview) {
             rtview.lpVtbl.Release(rtview);
         }
+        vbuffer.lpVtbl.Release(vbuffer);
     }
 
     void draw() {
