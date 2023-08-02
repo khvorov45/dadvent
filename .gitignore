@@ -18,4 +18,4 @@ dadvent-test-*
 *.rdbg
 build/*
 .tasks
-source/shader_vs.c
+source/shader*.c

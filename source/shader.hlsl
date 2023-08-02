@@ -8,7 +8,7 @@ struct PSInput {
 
 PSInput vs(VSInput input) {
     PSInput output;
-    output.pos = float4(input.pos, 0, 0);
+    output.pos = float4(input.pos, 0, 1);
     return output;
 }
 

@@ -2,6 +2,7 @@ module dadvent_d3d11;
 
 import sysd3d11;
 import shader_vs;
+import shader_ps;
 
 pragma(lib, "d3d11");
 pragma(lib, "dxguid");
@@ -20,6 +21,10 @@ struct D3D11Renderer {
     IDXGISwapChain1* swapchain;
     ID3D11RenderTargetView* rtview;
     ID3D11Buffer* vbuffer;
+    ID3D11VertexShader* vshader;
+    ID3D11PixelShader* pshader;
+    ID3D11InputLayout* layout;
+    ID3D11RasterizerState* rasterizer;
 
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
     this(void* hwnd_) {
@@ -158,8 +163,40 @@ struct D3D11Renderer {
             assert(CreateBufferResult == 0);
         }
 
-        // TODO(khvorov) Shaders
-        const char[] temp = globalCompiledShader_shader_vs[0 .. globalCompiledShader_shader_vs.length];
+        // NOTE(khvorov) Shaders
+        {
+            HRESULT CreateVertexShaderResult = device.lpVtbl.CreateVertexShader(
+                device, globalCompiledShader_shader_vs.ptr, globalCompiledShader_shader_vs.length, null, &vshader
+            );
+            assert(CreateVertexShaderResult == 0);
+
+            HRESULT CreatePixelShaderResult = device.lpVtbl.CreatePixelShader(
+                device, globalCompiledShader_shader_ps.ptr, globalCompiledShader_shader_ps.length, null, &pshader
+            );
+            assert(CreatePixelShaderResult == 0);
+
+            // dfmt off
+            D3D11_INPUT_ELEMENT_DESC[1] desc = [
+                { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            ];
+            // dfmt on
+
+            HRESULT CreateInputLayoutResult = device.lpVtbl.CreateInputLayout(
+                device, desc.ptr, desc.length,
+                globalCompiledShader_shader_vs.ptr, globalCompiledShader_shader_vs.length, &layout
+            );
+            assert(CreateInputLayoutResult == 0);
+        }
+
+        // NOTE(khvorov) Rasterizer
+        {
+            D3D11_RASTERIZER_DESC desc = {
+                FillMode: D3D11_FILL_SOLID,
+                CullMode: D3D11_CULL_NONE,
+            };
+            HRESULT CreateRasterizerStateResult = device.lpVtbl.CreateRasterizerState(device, &desc, &rasterizer);
+            assert(CreateRasterizerStateResult == 0);
+        }
     }
 
     void destroy() {
@@ -170,6 +207,10 @@ struct D3D11Renderer {
             rtview.lpVtbl.Release(rtview);
         }
         vbuffer.lpVtbl.Release(vbuffer);
+        vshader.lpVtbl.Release(vshader);
+        pshader.lpVtbl.Release(pshader);
+        layout.lpVtbl.Release(layout);
+        rasterizer.lpVtbl.Release(rasterizer);
     }
 
     void draw() {
@@ -224,6 +265,25 @@ struct D3D11Renderer {
 
             float[4] color = [0.1, 0.1, 0.1, 1];
             context.lpVtbl.ClearRenderTargetView(context, rtview, &color[0]);
+
+            context.lpVtbl.IASetInputLayout(context, layout);
+            context.lpVtbl.IASetPrimitiveTopology(context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            {
+                ID3D11Buffer*[1] buffers = [vbuffer];
+                uint[1] stride = [float.sizeof * 2];
+                uint[1] offset = [0];
+                context.lpVtbl.IASetVertexBuffers(
+                    context, 0, 1, buffers.ptr, stride.ptr, offset.ptr
+                );
+            }
+
+            context.lpVtbl.VSSetShader(context, vshader, null, 0);
+            context.lpVtbl.RSSetViewports(context, 1, &viewport);
+            context.lpVtbl.RSSetState(context, rasterizer);
+            context.lpVtbl.PSSetShader(context, pshader, null, 0);
+            context.lpVtbl.OMSetRenderTargets(context, 1, &rtview, null);
+
+            context.lpVtbl.Draw(context, 3, 0);
 
             HRESULT PresentResult = swapchain.lpVtbl.Present(swapchain, 1, 0);
             const HRESULT DXGI_STATUS_OCCLUDED = 0x087A0001L;
