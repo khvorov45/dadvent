@@ -25,6 +25,18 @@ struct D3D11Renderer {
     ID3D11InputLayout* layout;
     ID3D11RasterizerState* rasterizer;
 
+    struct V2 {
+        float x;
+        float y;
+    }
+
+    struct VSInput {
+        V2 topleft;
+        V2 botright;
+    }
+
+    ID3D11Buffer* rectBuffer;
+
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
     this(void* hwnd_) {
         window.hwnd = cast(HWND)hwnd_;
@@ -37,7 +49,6 @@ struct D3D11Renderer {
             debug flags = D3D11_CREATE_DEVICE_DEBUG;
 
             const uint D3D11_SDK_VERSION = 7;
-            // dfmt off
             HRESULT D3D11CreateDeviceResult = D3D11CreateDevice(
                 pAdapter: null,
                 DriverType: D3D_DRIVER_TYPE_HARDWARE,
@@ -50,7 +61,6 @@ struct D3D11Renderer {
                 pFeatureLevel: null,
                 ppImmediateContext: &context,
             );
-            // dfmt on
 
             assert(D3D11CreateDeviceResult == 0);
         }
@@ -124,7 +134,6 @@ struct D3D11Renderer {
                 SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
             };
 
-            // dfmt off
             HRESULT CreateSwapChainForHwndResult = dxgiFactory.lpVtbl.CreateSwapChainForHwnd(
                 This: dxgiFactory,
                 pDevice: cast(IUnknown*)device,
@@ -134,7 +143,6 @@ struct D3D11Renderer {
                 pRestrictToOutput: null,
                 ppSwapChain: &swapchain
             );
-            // dfmt on
             assert(CreateSwapChainForHwndResult == 0);
 
             const uint DXGI_MWA_NO_ALT_ENTER = 1 << 1;
@@ -145,6 +153,24 @@ struct D3D11Renderer {
             dxgiDevice.lpVtbl.Release(dxgiDevice);
             dxgiAdapter.lpVtbl.Release(dxgiAdapter);
             dxgiFactory.lpVtbl.Release(dxgiFactory);
+        }
+
+        {
+            VSInput[2] data = [
+                {{10, 10}, {20, 20}},
+                {{50, 50}, {80, 80}},
+            ];
+
+            D3D11_BUFFER_DESC desc = {
+                ByteWidth: data.sizeof,
+                Usage: D3D11_USAGE_DYNAMIC,
+                BindFlags: D3D11_BIND_VERTEX_BUFFER,
+                CPUAccessFlags: D3D11_CPU_ACCESS_WRITE,
+            };
+
+            D3D11_SUBRESOURCE_DATA initial = {data.ptr};
+            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, &initial, &rectBuffer);
+            assert(CreateBufferResult == 0);
         }
 
         // NOTE(khvorov) Shaders
@@ -159,11 +185,10 @@ struct D3D11Renderer {
             );
             assert(CreatePixelShaderResult == 0);
 
-            // dfmt off
-            D3D11_INPUT_ELEMENT_DESC[1] desc = [
-                { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            D3D11_INPUT_ELEMENT_DESC[2] desc = [
+                { "TOPLEFT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.topleft.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "BOTRIGHT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.botright.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
             ];
-            // dfmt on
 
             HRESULT CreateInputLayoutResult = device.lpVtbl.CreateInputLayout(
                 device, desc.ptr, desc.length,
@@ -194,6 +219,7 @@ struct D3D11Renderer {
         pshader.lpVtbl.Release(pshader);
         layout.lpVtbl.Release(layout);
         rasterizer.lpVtbl.Release(rasterizer);
+        rectBuffer.lpVtbl.Release(rectBuffer);
     }
 
     void draw() {
@@ -252,12 +278,20 @@ struct D3D11Renderer {
             context.lpVtbl.IASetInputLayout(context, layout);
             context.lpVtbl.IASetPrimitiveTopology(context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
             context.lpVtbl.VSSetShader(context, vshader, null, 0);
+
+            {
+                ID3D11Buffer*[1] buffers = [rectBuffer];
+                uint[1] strides = [VSInput.sizeof];
+                uint[1] offsets = [0];
+                context.lpVtbl.IASetVertexBuffers(context, 0, buffers.length, buffers.ptr, strides.ptr, offsets.ptr);
+            }
+
             context.lpVtbl.RSSetViewports(context, 1, &viewport);
             context.lpVtbl.RSSetState(context, rasterizer);
             context.lpVtbl.PSSetShader(context, pshader, null, 0);
             context.lpVtbl.OMSetRenderTargets(context, 1, &rtview, null);
 
-            context.lpVtbl.Draw(context, 4, 0);
+            context.lpVtbl.DrawInstanced(context, 4, 2, 0, 0);
 
             HRESULT PresentResult = swapchain.lpVtbl.Present(swapchain, 1, 0);
             const HRESULT DXGI_STATUS_OCCLUDED = 0x087A0001L;
