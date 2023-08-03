@@ -20,7 +20,6 @@ struct D3D11Renderer {
     ID3D11DeviceContext* context;
     IDXGISwapChain1* swapchain;
     ID3D11RenderTargetView* rtview;
-    ID3D11Buffer* vbuffer;
     ID3D11VertexShader* vshader;
     ID3D11PixelShader* pshader;
     ID3D11InputLayout* layout;
@@ -148,21 +147,6 @@ struct D3D11Renderer {
             dxgiFactory.lpVtbl.Release(dxgiFactory);
         }
 
-        // NOTE(khvorov) Vertex buffer
-        {
-            float[2][3] data = [[-1, -1], [0, 1], [1, -1]];
-
-            D3D11_BUFFER_DESC desc = {
-                ByteWidth: data.sizeof,
-                Usage: D3D11_USAGE_IMMUTABLE,
-                BindFlags: D3D11_BIND_VERTEX_BUFFER,
-            };
-
-            D3D11_SUBRESOURCE_DATA dataSubresource = {pSysMem: &data[0][0]};
-            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, &dataSubresource, &vbuffer);
-            assert(CreateBufferResult == 0);
-        }
-
         // NOTE(khvorov) Shaders
         {
             HRESULT CreateVertexShaderResult = device.lpVtbl.CreateVertexShader(
@@ -206,7 +190,6 @@ struct D3D11Renderer {
         if (rtview) {
             rtview.lpVtbl.Release(rtview);
         }
-        vbuffer.lpVtbl.Release(vbuffer);
         vshader.lpVtbl.Release(vshader);
         pshader.lpVtbl.Release(pshader);
         layout.lpVtbl.Release(layout);
@@ -268,15 +251,6 @@ struct D3D11Renderer {
 
             context.lpVtbl.IASetInputLayout(context, layout);
             context.lpVtbl.IASetPrimitiveTopology(context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            {
-                ID3D11Buffer*[1] buffers = [vbuffer];
-                uint[1] stride = [float.sizeof * 2];
-                uint[1] offset = [0];
-                context.lpVtbl.IASetVertexBuffers(
-                    context, 0, 1, buffers.ptr, stride.ptr, offset.ptr
-                );
-            }
-
             context.lpVtbl.VSSetShader(context, vshader, null, 0);
             context.lpVtbl.RSSetViewports(context, 1, &viewport);
             context.lpVtbl.RSSetState(context, rasterizer);
