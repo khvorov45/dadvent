@@ -250,14 +250,14 @@ struct D3D11Renderer {
             context.lpVtbl.ClearRenderTargetView(context, rtview, &color[0]);
 
             context.lpVtbl.IASetInputLayout(context, layout);
-            context.lpVtbl.IASetPrimitiveTopology(context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            context.lpVtbl.IASetPrimitiveTopology(context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
             context.lpVtbl.VSSetShader(context, vshader, null, 0);
             context.lpVtbl.RSSetViewports(context, 1, &viewport);
             context.lpVtbl.RSSetState(context, rasterizer);
             context.lpVtbl.PSSetShader(context, pshader, null, 0);
             context.lpVtbl.OMSetRenderTargets(context, 1, &rtview, null);
 
-            context.lpVtbl.Draw(context, 3, 0);
+            context.lpVtbl.Draw(context, 4, 0);
 
             HRESULT PresentResult = swapchain.lpVtbl.Present(swapchain, 1, 0);
             const HRESULT DXGI_STATUS_OCCLUDED = 0x087A0001L;

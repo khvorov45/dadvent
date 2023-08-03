@@ -7,10 +7,11 @@ struct PSInput {
 };
 
 PSInput vs(VSInput input) {
-    float2 vertices[3];
-    vertices[0] = float2(-1, -1);
-    vertices[1] = float2(0, 1);
-    vertices[2] = float2(1, -1);
+    float2 vertices[4];
+    vertices[0] = float2(-1,  1);
+    vertices[1] = float2( 1,  1);
+    vertices[2] = float2(-1, -1);
+    vertices[3] = float2( 1, -1);
     float2 vertex = vertices[input.vertexIndex];
 
     PSInput output;
