@@ -23,22 +23,40 @@ struct D3D11Renderer {
     ID3D11PixelShader* pshader;
     ID3D11InputLayout* layout;
     ID3D11RasterizerState* rasterizer;
+    ID3D11ShaderResourceView* textureView;
+    ID3D11SamplerState* sampler;
+    ID3D11BlendState* blend;
 
     struct V2 {
         float x;
         float y;
     }
+    struct Color {
+        float r;
+        float g;
+        float b;
+        float a;
+    }
     struct VSInput {
         V2 topleft;
         V2 botright;
+        V2 textopleft;
+        V2 texbotright;
+        Color color;
     }
     ID3D11Buffer* rectBuffer;
-    
-    struct ConstBuffer {
+
+    struct ConstBufferViewport {
         V2 vpdim;
         byte[8] pad;
     }
-    ID3D11Buffer* constBuffer;
+    ID3D11Buffer* constBufferViewport;
+
+    struct ConstBufferTexdim {
+        V2 texdim;
+        byte[8] pad;
+    }
+    ID3D11Buffer* constBufferTexdim;
 
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
     this(void* hwnd_) {
@@ -155,23 +173,36 @@ struct D3D11Renderer {
             dxgiFactory.lpVtbl.Release(dxgiFactory);
         }
 
-        // NOTE(khvorov) Constant buffer
+        // NOTE(khvorov) Constant buffer texdim
         {
             D3D11_BUFFER_DESC desc = {
-                ByteWidth: ConstBuffer.sizeof,
+                ByteWidth: ConstBufferViewport.sizeof,
+                Usage: D3D11_USAGE_IMMUTABLE,
+                BindFlags: D3D11_BIND_CONSTANT_BUFFER,
+            };
+            ConstBufferTexdim data = {texdim: {2, 2}};
+            D3D11_SUBRESOURCE_DATA initial = {&data};
+            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, &initial, &constBufferTexdim);
+            assert(CreateBufferResult == 0);
+        }
+
+        // NOTE(khvorov) Constant buffer viewport
+        {
+            D3D11_BUFFER_DESC desc = {
+                ByteWidth: ConstBufferViewport.sizeof,
                 Usage: D3D11_USAGE_DYNAMIC,
                 BindFlags: D3D11_BIND_CONSTANT_BUFFER,
                 CPUAccessFlags: D3D11_CPU_ACCESS_WRITE,
             };
-            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, null, &constBuffer);
+            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, null, &constBufferViewport);
             assert(CreateBufferResult == 0);
         }
 
         // NOTE(khvorov) Rect buffer
         {
             VSInput[2] data = [
-                {{10, 10}, {20, 20}},
-                {{50, 50}, {80, 80}},
+                {{10, 10}, {20, 20}, {0, 0}, {2, 2}, {1, 1, 1, 1}},
+                {{50, 50}, {80, 80}, {0, 0}, {2, 2}, {1, 0, 0, 1}},
             ];
 
             D3D11_BUFFER_DESC desc = {
@@ -198,9 +229,12 @@ struct D3D11Renderer {
             );
             assert(CreatePixelShaderResult == 0);
 
-            D3D11_INPUT_ELEMENT_DESC[2] desc = [
+            D3D11_INPUT_ELEMENT_DESC[5] desc = [
                 { "TOPLEFT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.topleft.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
                 { "BOTRIGHT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.botright.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "TEXTOPLEFT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.textopleft.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "TEXBOTRIGHT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.texbotright.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, VSInput.color.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
             ];
 
             HRESULT CreateInputLayoutResult = device.lpVtbl.CreateInputLayout(
@@ -219,6 +253,60 @@ struct D3D11Renderer {
             HRESULT CreateRasterizerStateResult = device.lpVtbl.CreateRasterizerState(device, &desc, &rasterizer);
             assert(CreateRasterizerStateResult == 0);
         }
+
+        // NOTE(khvorov) Texture
+        {
+            D3D11_TEXTURE2D_DESC desc = {
+                Width: 2,
+                Height: 2,
+                MipLevels: 1,
+                ArraySize: 1,
+                Format: DXGI_FORMAT_A8_UNORM,
+                SampleDesc: {Count: 1},
+                Usage: D3D11_USAGE_IMMUTABLE,
+                BindFlags: D3D11_BIND_SHADER_RESOURCE,
+            };
+
+            byte[4] pixels = cast(byte[4])[10, 100, 200, 255];
+            D3D11_SUBRESOURCE_DATA initial = {pSysMem: pixels.ptr, SysMemPitch: 2};
+
+            ID3D11Texture2D* texture;
+            HRESULT CreateTexture2DResult = device.lpVtbl.CreateTexture2D(device, &desc, &initial, &texture);
+            assert(CreateTexture2DResult == 0);
+            HRESULT CreateShaderResourceViewResult = device.lpVtbl.CreateShaderResourceView(device, cast(ID3D11Resource*)texture, null, &textureView);
+            assert(CreateShaderResourceViewResult == 0);
+            texture.lpVtbl.Release(texture);
+        }
+
+        // NOTE(khvorov) Sampler
+        {
+            D3D11_SAMPLER_DESC desc = {
+                Filter: D3D11_FILTER_MIN_MAG_MIP_POINT,
+                AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,
+                AddressV: D3D11_TEXTURE_ADDRESS_CLAMP,
+                AddressW: D3D11_TEXTURE_ADDRESS_CLAMP ,
+            };
+            HRESULT CreateSamplerStateResult = device.lpVtbl.CreateSamplerState(device, &desc, &sampler);
+            assert(CreateSamplerStateResult == 0);
+        }
+
+        // NOTE(khvorov) Blend
+        {
+            D3D11_BLEND_DESC desc = {
+                RenderTarget: [{
+                    BlendEnable: TRUE,
+                    SrcBlend: D3D11_BLEND_SRC_ALPHA,
+                    DestBlend: D3D11_BLEND_INV_SRC_ALPHA,
+                    BlendOp: D3D11_BLEND_OP_ADD,
+                    SrcBlendAlpha: D3D11_BLEND_SRC_ALPHA,
+                    DestBlendAlpha: D3D11_BLEND_INV_SRC_ALPHA,
+                    BlendOpAlpha: D3D11_BLEND_OP_ADD,
+                    RenderTargetWriteMask: D3D11_COLOR_WRITE_ENABLE_ALL,
+                }],
+            };
+            HRESULT CreateBlendStateResult = device.lpVtbl.CreateBlendState(device, &desc, &blend);
+            assert(CreateBlendStateResult == 0);
+        }
     }
 
     void destroy() {
@@ -233,6 +321,11 @@ struct D3D11Renderer {
         layout.lpVtbl.Release(layout);
         rasterizer.lpVtbl.Release(rasterizer);
         rectBuffer.lpVtbl.Release(rectBuffer);
+        constBufferViewport.lpVtbl.Release(constBufferViewport);
+        textureView.lpVtbl.Release(textureView);
+        constBufferTexdim.lpVtbl.Release(constBufferTexdim);
+        sampler.lpVtbl.Release(sampler);
+        blend.lpVtbl.Release(blend);
     }
 
     void draw() {
@@ -279,7 +372,6 @@ struct D3D11Renderer {
         if (rtview) {
             assert(window.width != 0 && window.height != 0);
 
-            // TODO(khvorov) Do we need maxdepth even if we are not using depth?
             D3D11_VIEWPORT viewport = {
                 Width: window.width,
                 Height: window.height,
@@ -294,14 +386,14 @@ struct D3D11Renderer {
 
             {
                 D3D11_MAPPED_SUBRESOURCE mapped;
-                context.lpVtbl.Map(context, cast(ID3D11Resource*)constBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-                ConstBuffer* buffer = cast(ConstBuffer*)mapped.pData;
+                context.lpVtbl.Map(context, cast(ID3D11Resource*)constBufferViewport, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+                ConstBufferViewport* buffer = cast(ConstBufferViewport*)mapped.pData;
                 buffer.vpdim = V2(window.width, window.height);
-                context.lpVtbl.Unmap(context, cast(ID3D11Resource*)constBuffer, 0);
+                context.lpVtbl.Unmap(context, cast(ID3D11Resource*)constBufferViewport, 0);
             }
 
             {
-                ID3D11Buffer*[1] buffers = [constBuffer];
+                ID3D11Buffer*[2] buffers = [constBufferTexdim, constBufferViewport];
                 context.lpVtbl.VSSetConstantBuffers(context, 0, buffers.length, buffers.ptr);
             }
 
@@ -315,8 +407,19 @@ struct D3D11Renderer {
             context.lpVtbl.RSSetViewports(context, 1, &viewport);
             context.lpVtbl.RSSetState(context, rasterizer);
             context.lpVtbl.PSSetShader(context, pshader, null, 0);
-            context.lpVtbl.OMSetRenderTargets(context, 1, &rtview, null);
 
+            {
+                ID3D11ShaderResourceView*[1] resources = [textureView];
+                context.lpVtbl.PSSetShaderResources(context, 0, resources.length, resources.ptr);
+            }
+
+            {
+                ID3D11SamplerState*[1] samplers = [sampler];
+                context.lpVtbl.PSSetSamplers(context, 0, samplers.length, samplers.ptr);
+            }
+
+            context.lpVtbl.OMSetRenderTargets(context, 1, &rtview, null);
+            context.lpVtbl.OMSetBlendState(context, blend, null, 0xffffffff);
             context.lpVtbl.DrawInstanced(context, 4, 2, 0, 0);
 
             HRESULT PresentResult = swapchain.lpVtbl.Present(swapchain, 1, 0);
