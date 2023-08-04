@@ -8,20 +8,18 @@ struct PSInput {
     float4 pos : SV_POSITION;
 };
 
-float2 toclip(float2 vert) {
-    // TODO(khvorov) Pass in dimensions
-    float2 vpdim = float2(500, 500);
-    float2 result = vert / vpdim * 2 - 1;
-    return result;
+cbuffer cbuffer0 : register(b0) {
+    float2 vpdim;
 }
 
 PSInput vs(VSInput input) {
     float2 vertices[4];
-    vertices[0] = toclip(input.topleft);
-    vertices[1] = toclip(float2(input.botright.x, input.topleft.y));
-    vertices[2] = toclip(float2(input.topleft.x, input.botright.y));
-    vertices[3] = toclip(input.botright);
-    float2 vertex = vertices[input.vertexIndex];
+    vertices[0] = input.topleft;
+    vertices[1] = float2(input.botright.x, input.topleft.y);
+    vertices[2] = float2(input.topleft.x, input.botright.y);
+    vertices[3] = input.botright;
+
+    float2 vertex = vertices[input.vertexIndex] / vpdim * 2 - 1;
     vertex.y *= -1;
 
     PSInput output;

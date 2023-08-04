@@ -13,7 +13,6 @@ struct D3D11Renderer {
         int width;
         int height;
     }
-
     Window window;
 
     ID3D11Device* device;
@@ -29,13 +28,17 @@ struct D3D11Renderer {
         float x;
         float y;
     }
-
     struct VSInput {
         V2 topleft;
         V2 botright;
     }
-
     ID3D11Buffer* rectBuffer;
+    
+    struct ConstBuffer {
+        V2 vpdim;
+        byte[8] pad;
+    }
+    ID3D11Buffer* constBuffer;
 
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
     this(void* hwnd_) {
@@ -112,8 +115,7 @@ struct D3D11Renderer {
         // NOTE(khvorov) Swapchain
         {
             IDXGIDevice* dxgiDevice;
-            HRESULT QueryInterfaceResult =
-                device.lpVtbl.QueryInterface(device, &IID_IDXGIDevice, cast(void**)&dxgiDevice);
+            HRESULT QueryInterfaceResult = device.lpVtbl.QueryInterface(device, &IID_IDXGIDevice, cast(void**)&dxgiDevice);
             assert(QueryInterfaceResult == 0);
 
             IDXGIAdapter* dxgiAdapter;
@@ -121,8 +123,7 @@ struct D3D11Renderer {
             assert(GetAdapterResult == 0);
 
             IDXGIFactory2* dxgiFactory;
-            HRESULT GetParentResult =
-                dxgiAdapter.lpVtbl.GetParent(dxgiAdapter, &IID_IDXGIFactory2, cast(void**)&dxgiFactory);
+            HRESULT GetParentResult = dxgiAdapter.lpVtbl.GetParent(dxgiAdapter, &IID_IDXGIFactory2, cast(void**)&dxgiFactory);
             assert(GetParentResult == 0);
 
             DXGI_SWAP_CHAIN_DESC1 desc = {
@@ -146,8 +147,7 @@ struct D3D11Renderer {
             assert(CreateSwapChainForHwndResult == 0);
 
             const uint DXGI_MWA_NO_ALT_ENTER = 1 << 1;
-            HRESULT MakeWindowAssociationResult =
-                dxgiFactory.lpVtbl.MakeWindowAssociation(dxgiFactory, window.hwnd, DXGI_MWA_NO_ALT_ENTER);
+            HRESULT MakeWindowAssociationResult = dxgiFactory.lpVtbl.MakeWindowAssociation(dxgiFactory, window.hwnd, DXGI_MWA_NO_ALT_ENTER);
             assert(MakeWindowAssociationResult == 0);
 
             dxgiDevice.lpVtbl.Release(dxgiDevice);
@@ -155,6 +155,19 @@ struct D3D11Renderer {
             dxgiFactory.lpVtbl.Release(dxgiFactory);
         }
 
+        // NOTE(khvorov) Constant buffer
+        {
+            D3D11_BUFFER_DESC desc = {
+                ByteWidth: ConstBuffer.sizeof,
+                Usage: D3D11_USAGE_DYNAMIC,
+                BindFlags: D3D11_BIND_CONSTANT_BUFFER,
+                CPUAccessFlags: D3D11_CPU_ACCESS_WRITE,
+            };
+            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, null, &constBuffer);
+            assert(CreateBufferResult == 0);
+        }
+
+        // NOTE(khvorov) Rect buffer
         {
             VSInput[2] data = [
                 {{10, 10}, {20, 20}},
@@ -278,6 +291,19 @@ struct D3D11Renderer {
             context.lpVtbl.IASetInputLayout(context, layout);
             context.lpVtbl.IASetPrimitiveTopology(context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
             context.lpVtbl.VSSetShader(context, vshader, null, 0);
+
+            {
+                D3D11_MAPPED_SUBRESOURCE mapped;
+                context.lpVtbl.Map(context, cast(ID3D11Resource*)constBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+                ConstBuffer* buffer = cast(ConstBuffer*)mapped.pData;
+                buffer.vpdim = V2(window.width, window.height);
+                context.lpVtbl.Unmap(context, cast(ID3D11Resource*)constBuffer, 0);
+            }
+
+            {
+                ID3D11Buffer*[1] buffers = [constBuffer];
+                context.lpVtbl.VSSetConstantBuffers(context, 0, buffers.length, buffers.ptr);
+            }
 
             {
                 ID3D11Buffer*[1] buffers = [rectBuffer];
