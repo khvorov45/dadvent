@@ -1,11 +1,37 @@
 module dadvent_d3d11;
 
 import sysd3d11;
+import font;
 import shader_vs;
 import shader_ps;
 
 pragma(lib, "d3d11");
 pragma(lib, "dxguid");
+
+struct V2 {
+    float x;
+    float y;
+
+    V2 opBinary(string op: "+")(V2 rhs) {
+        V2 result = {x + rhs.x, y + rhs.y};
+        return result;
+    }
+}
+
+struct Color {
+    float r;
+    float g;
+    float b;
+    float a;
+}
+
+struct VSInput {
+    V2 topleft;
+    V2 botright;
+    V2 textopleft;
+    V2 texbotright;
+    Color color;
+}
 
 struct D3D11Renderer {
     struct Window {
@@ -27,24 +53,13 @@ struct D3D11Renderer {
     ID3D11SamplerState* sampler;
     ID3D11BlendState* blend;
 
-    struct V2 {
-        float x;
-        float y;
+    struct Rects {
+        ID3D11Buffer* buffer;
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        long length;
+        long capacity;
     }
-    struct Color {
-        float r;
-        float g;
-        float b;
-        float a;
-    }
-    struct VSInput {
-        V2 topleft;
-        V2 botright;
-        V2 textopleft;
-        V2 texbotright;
-        Color color;
-    }
-    ID3D11Buffer* rectBuffer;
+    Rects rects;
 
     struct ConstBufferViewport {
         V2 vpdim;
@@ -52,11 +67,17 @@ struct D3D11Renderer {
     }
     ID3D11Buffer* constBufferViewport;
 
-    struct ConstBufferTexdim {
+    struct ConstBufferFontTexdim {
         V2 texdim;
         byte[8] pad;
     }
-    ID3D11Buffer* constBufferTexdim;
+    struct Font {
+        ID3D11Buffer* constBufferTexdim;
+        long chWidth;
+        long chHeight;
+    }
+    Font font;
+
 
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
     this(void* hwnd_) {
@@ -90,8 +111,7 @@ struct D3D11Renderer {
         debug {
             {
                 ID3D11InfoQueue* info;
-                HRESULT QueryInterfaceResult =
-                    device.lpVtbl.QueryInterface(device, &IID_ID3D11InfoQueue, cast(void**)&info);
+                HRESULT QueryInterfaceResult = device.lpVtbl.QueryInterface(device, &IID_ID3D11InfoQueue, cast(void**)&info);
                 assert(QueryInterfaceResult == 0);
                 assert(info);
 
@@ -173,19 +193,6 @@ struct D3D11Renderer {
             dxgiFactory.lpVtbl.Release(dxgiFactory);
         }
 
-        // NOTE(khvorov) Constant buffer texdim
-        {
-            D3D11_BUFFER_DESC desc = {
-                ByteWidth: ConstBufferViewport.sizeof,
-                Usage: D3D11_USAGE_IMMUTABLE,
-                BindFlags: D3D11_BIND_CONSTANT_BUFFER,
-            };
-            ConstBufferTexdim data = {texdim: {2, 2}};
-            D3D11_SUBRESOURCE_DATA initial = {&data};
-            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, &initial, &constBufferTexdim);
-            assert(CreateBufferResult == 0);
-        }
-
         // NOTE(khvorov) Constant buffer viewport
         {
             D3D11_BUFFER_DESC desc = {
@@ -200,21 +207,16 @@ struct D3D11Renderer {
 
         // NOTE(khvorov) Rect buffer
         {
-            VSInput[2] data = [
-                {{10, 10}, {20, 20}, {0, 0}, {2, 2}, {1, 1, 1, 1}},
-                {{50, 50}, {80, 80}, {0, 0}, {2, 2}, {1, 0, 0, 1}},
-            ];
-
+            rects.capacity = 1024;
             D3D11_BUFFER_DESC desc = {
-                ByteWidth: data.sizeof,
+                ByteWidth: cast(uint)(VSInput.sizeof * rects.capacity),
                 Usage: D3D11_USAGE_DYNAMIC,
                 BindFlags: D3D11_BIND_VERTEX_BUFFER,
                 CPUAccessFlags: D3D11_CPU_ACCESS_WRITE,
             };
-
-            D3D11_SUBRESOURCE_DATA initial = {data.ptr};
-            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, &initial, &rectBuffer);
+            HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &desc, null, &rects.buffer);
             assert(CreateBufferResult == 0);
+            context.lpVtbl.Map(context, cast(ID3D11Resource*)rects.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &rects.mapped);
         }
 
         // NOTE(khvorov) Shaders
@@ -256,9 +258,40 @@ struct D3D11Renderer {
 
         // NOTE(khvorov) Texture
         {
+            const long chCount = 128;
+            const long chWidth = 8;
+            const long chHeight = 16;
+            const long alphaWidth = chCount * chWidth;
+            const long alphaPitch = alphaWidth;
+            const long alphaHeight = chHeight;
+            const long alphaSize = alphaPitch * alphaHeight;
+            ubyte[alphaSize] alpha;
+            for (ubyte ch = 0; ch < chCount; ch++) {
+                ubyte[] chBytes = cast(ubyte[])(globalFontData[ch * 2 .. ch * 2 + 2]);
+                foreach (chByteIndex, chByte; chBytes) {
+                    for (ubyte offset = 0; offset < 8; offset++) {
+                        ubyte mask = cast(ubyte)(1 << offset);
+                        if (chByte & mask) {
+                            long alphaIndex = ch * chWidth + offset + (chByteIndex * alphaPitch);
+                            alpha[alphaIndex] = cast(ubyte)255;
+                        }
+                    }
+                }
+            }
+            font.chWidth = chWidth;
+            font.chHeight = chHeight;
+
+            // NOTE(khvorov) Fill the first character to be used for solid rects
+            for (long row = 0; row < chHeight; row++) {
+                for (long col = 0; col < chWidth; col++) {
+                    long index = row * alphaPitch + col;
+                    alpha[index] = 255;
+                }
+            }
+
             D3D11_TEXTURE2D_DESC desc = {
-                Width: 2,
-                Height: 2,
+                Width: alphaWidth,
+                Height: alphaHeight,
                 MipLevels: 1,
                 ArraySize: 1,
                 Format: DXGI_FORMAT_A8_UNORM,
@@ -267,8 +300,7 @@ struct D3D11Renderer {
                 BindFlags: D3D11_BIND_SHADER_RESOURCE,
             };
 
-            byte[4] pixels = cast(byte[4])[10, 100, 200, 255];
-            D3D11_SUBRESOURCE_DATA initial = {pSysMem: pixels.ptr, SysMemPitch: 2};
+            D3D11_SUBRESOURCE_DATA initial = {pSysMem: alpha.ptr, SysMemPitch: alphaPitch};
 
             ID3D11Texture2D* texture;
             HRESULT CreateTexture2DResult = device.lpVtbl.CreateTexture2D(device, &desc, &initial, &texture);
@@ -276,6 +308,20 @@ struct D3D11Renderer {
             HRESULT CreateShaderResourceViewResult = device.lpVtbl.CreateShaderResourceView(device, cast(ID3D11Resource*)texture, null, &textureView);
             assert(CreateShaderResourceViewResult == 0);
             texture.lpVtbl.Release(texture);
+
+
+            // NOTE(khvorov) Constant buffer texdim
+            {
+                D3D11_BUFFER_DESC texDesc = {
+                    ByteWidth: ConstBufferViewport.sizeof,
+                    Usage: D3D11_USAGE_IMMUTABLE,
+                    BindFlags: D3D11_BIND_CONSTANT_BUFFER,
+                };
+                ConstBufferFontTexdim data = {texdim: {alphaWidth, alphaHeight}};
+                D3D11_SUBRESOURCE_DATA texInitial = {&data};
+                HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &texDesc, &texInitial, &font.constBufferTexdim);
+                assert(CreateBufferResult == 0);
+            }
         }
 
         // NOTE(khvorov) Sampler
@@ -320,12 +366,46 @@ struct D3D11Renderer {
         pshader.lpVtbl.Release(pshader);
         layout.lpVtbl.Release(layout);
         rasterizer.lpVtbl.Release(rasterizer);
-        rectBuffer.lpVtbl.Release(rectBuffer);
+        context.lpVtbl.Unmap(context, cast(ID3D11Resource*)rects.buffer, 0);
+        rects.buffer.lpVtbl.Release(rects.buffer);
         constBufferViewport.lpVtbl.Release(constBufferViewport);
         textureView.lpVtbl.Release(textureView);
-        constBufferTexdim.lpVtbl.Release(constBufferTexdim);
+        font.constBufferTexdim.lpVtbl.Release(font.constBufferTexdim);
         sampler.lpVtbl.Release(sampler);
         blend.lpVtbl.Release(blend);
+    }
+
+    void pushRect(VSInput data) {
+        VSInput* buffer = cast(VSInput*)rects.mapped.pData;
+        buffer[rects.length] = data;
+        rects.length += 1;
+    }
+
+    void pushSolidRect(V2 topleft, V2 dim, Color color = Color(1, 1, 1, 1)) {
+        VSInput rect = {
+            topleft, topleft + dim,
+            {0, 0}, {font.chWidth, font.chHeight},
+            color,
+        };
+        pushRect(rect);
+    }
+
+    void pushGlyph(char ch, V2 topleft, Color color = Color(1, 1, 1, 1)) {
+        V2 textopleft = {ch * font.chWidth, 0};
+        VSInput rect = {
+            topleft, {topleft.x + font.chWidth, topleft.y + font.chHeight},
+            textopleft, {textopleft.x + font.chWidth, textopleft.y + font.chHeight},
+            color,
+        };
+        pushRect(rect);
+    }
+
+    void pushTextline(string line, V2 topleft, Color color = Color(1, 1, 1, 1)) {
+        V2 currentTopleft = topleft;
+        foreach (ch; line) {
+            pushGlyph(ch, currentTopleft, color);
+            currentTopleft.x += font.chWidth;
+        }
     }
 
     void draw() {
@@ -393,12 +473,13 @@ struct D3D11Renderer {
             }
 
             {
-                ID3D11Buffer*[2] buffers = [constBufferTexdim, constBufferViewport];
+                ID3D11Buffer*[2] buffers = [font.constBufferTexdim, constBufferViewport];
                 context.lpVtbl.VSSetConstantBuffers(context, 0, buffers.length, buffers.ptr);
             }
 
             {
-                ID3D11Buffer*[1] buffers = [rectBuffer];
+                context.lpVtbl.Unmap(context, cast(ID3D11Resource*)rects.buffer, 0);
+                ID3D11Buffer*[1] buffers = [rects.buffer];
                 uint[1] strides = [VSInput.sizeof];
                 uint[1] offsets = [0];
                 context.lpVtbl.IASetVertexBuffers(context, 0, buffers.length, buffers.ptr, strides.ptr, offsets.ptr);
@@ -420,7 +501,10 @@ struct D3D11Renderer {
 
             context.lpVtbl.OMSetRenderTargets(context, 1, &rtview, null);
             context.lpVtbl.OMSetBlendState(context, blend, null, 0xffffffff);
-            context.lpVtbl.DrawInstanced(context, 4, 2, 0, 0);
+
+            context.lpVtbl.DrawInstanced(context, 4, cast(uint)rects.length, 0, 0);
+            rects.length = 0;
+            context.lpVtbl.Map(context, cast(ID3D11Resource*)rects.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &rects.mapped);
 
             HRESULT PresentResult = swapchain.lpVtbl.Present(swapchain, 1, 0);
             const HRESULT DXGI_STATUS_OCCLUDED = 0x087A0001L;

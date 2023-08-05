@@ -108,6 +108,8 @@ extern (Windows) int WinMain(HINSTANCE instance) {
             break;
         }
 
+        d3d11Renderer.pushTextline("hello", V2(50, 50), Color(1, 0, 0, 1));
+        d3d11Renderer.pushSolidRect(V2(100, 100), V2(100, 200), Color(1, 0, 0, 0.1));
         d3d11Renderer.draw();
     }
 
