@@ -169,6 +169,7 @@ struct Arena {
 }
 
 void[] alloc(ref Arena arena, long size) {
+    // TODO(khvorov) Alignment?
     long newUsed = arena.used + size;
     void[] result = arena.buf[arena.used .. newUsed];
     arena.used = newUsed;

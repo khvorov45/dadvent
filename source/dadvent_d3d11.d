@@ -1,5 +1,6 @@
 module dadvent_d3d11;
 
+import microui;
 import sysd3d11;
 import font;
 import shader_vs;
@@ -12,17 +13,39 @@ struct V2 {
     float x;
     float y;
 
+    this(float x_, float y_) {
+        x = x_;
+        y = y_;
+    }
+
+    this(int x_, int y_) {
+        x = cast(float)x_;
+        y = cast(float)y_;
+    }
+
+    this(mu_Vec2 muvec2) {
+        x = cast(float)muvec2.x;
+        y = cast(float)muvec2.y;
+    }
+
     V2 opBinary(string op: "+")(V2 rhs) {
-        V2 result = {x + rhs.x, y + rhs.y};
+        V2 result = V2(x + rhs.x, y + rhs.y);
         return result;
     }
 }
 
 struct Color {
-    float r;
-    float g;
-    float b;
-    float a;
+    float r = 1;
+    float g = 1;
+    float b = 1;
+    float a = 1;
+
+    this(mu_Color mucol) {
+        r = cast(float)mucol.r / 255.0f;
+        g = cast(float)mucol.g / 255.0f;
+        b = cast(float)mucol.b / 255.0f;
+        a = cast(float)mucol.a / 255.0f;
+    }
 }
 
 struct VSInput {
@@ -31,6 +54,12 @@ struct VSInput {
     V2 textopleft;
     V2 texbotright;
     Color color;
+}
+
+struct Font {
+    ID3D11Buffer* constBufferTexdim;
+    long chWidth;
+    long chHeight;
 }
 
 struct D3D11Renderer {
@@ -70,11 +99,6 @@ struct D3D11Renderer {
     struct ConstBufferFontTexdim {
         V2 texdim;
         byte[8] pad;
-    }
-    struct Font {
-        ID3D11Buffer* constBufferTexdim;
-        long chWidth;
-        long chHeight;
     }
     Font font;
 
@@ -317,7 +341,7 @@ struct D3D11Renderer {
                     Usage: D3D11_USAGE_IMMUTABLE,
                     BindFlags: D3D11_BIND_CONSTANT_BUFFER,
                 };
-                ConstBufferFontTexdim data = {texdim: {alphaWidth, alphaHeight}};
+                ConstBufferFontTexdim data = {texdim: V2(alphaWidth, alphaHeight)};
                 D3D11_SUBRESOURCE_DATA texInitial = {&data};
                 HRESULT CreateBufferResult = device.lpVtbl.CreateBuffer(device, &texDesc, &texInitial, &font.constBufferTexdim);
                 assert(CreateBufferResult == 0);
@@ -377,30 +401,31 @@ struct D3D11Renderer {
 
     void pushRect(VSInput data) {
         VSInput* buffer = cast(VSInput*)rects.mapped.pData;
+        assert(rects.length >= 0 && rects.length < rects.capacity);
         buffer[rects.length] = data;
         rects.length += 1;
     }
 
-    void pushSolidRect(V2 topleft, V2 dim, Color color = Color(1, 1, 1, 1)) {
+    void pushSolidRect(V2 topleft, V2 dim, Color color = Color()) {
         VSInput rect = {
             topleft, topleft + dim,
-            {0, 0}, {font.chWidth, font.chHeight},
+            V2(0, 0), V2(font.chWidth, font.chHeight),
             color,
         };
         pushRect(rect);
     }
 
-    void pushGlyph(char ch, V2 topleft, Color color = Color(1, 1, 1, 1)) {
-        V2 textopleft = {ch * font.chWidth, 0};
+    void pushGlyph(char ch, V2 topleft, Color color = Color()) {
+        V2 textopleft = V2(ch * font.chWidth, 0);
         VSInput rect = {
-            topleft, {topleft.x + font.chWidth, topleft.y + font.chHeight},
-            textopleft, {textopleft.x + font.chWidth, textopleft.y + font.chHeight},
+            topleft, V2(topleft.x + font.chWidth, topleft.y + font.chHeight),
+            textopleft, V2(textopleft.x + font.chWidth, textopleft.y + font.chHeight),
             color,
         };
         pushRect(rect);
     }
 
-    void pushTextline(string line, V2 topleft, Color color = Color(1, 1, 1, 1)) {
+    void pushTextline(string line, V2 topleft, Color color = Color()) {
         V2 currentTopleft = topleft;
         foreach (ch; line) {
             pushGlyph(ch, currentTopleft, color);
@@ -457,7 +482,7 @@ struct D3D11Renderer {
                 Height: window.height,
             };
 
-            float[4] color = [0.1, 0.1, 0.1, 1];
+            float[4] color = [0, 0, 0, 0];
             context.lpVtbl.ClearRenderTargetView(context, rtview, &color[0]);
 
             context.lpVtbl.IASetInputLayout(context, layout);
