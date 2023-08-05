@@ -73,6 +73,28 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         assert(window.hwnd);
 
         ShowWindow(window.hwnd, SW_SHOWNORMAL);
+
+        // NOTE(khvorov) Fullscreen from https://devblogs.microsoft.com/oldnewthing/20100412-00/?p=14353
+        {
+            WINDOWPLACEMENT windowPlacement;
+            BOOL GetWindowPlacementResult = GetWindowPlacement(window.hwnd, &windowPlacement);
+            assert(GetWindowPlacementResult);
+
+            MONITORINFO monitorInfo = {cbSize: MONITORINFO.sizeof};
+            BOOL GetMonitorInfoResult = GetMonitorInfo(MonitorFromWindow(window.hwnd, MONITOR_DEFAULTTOPRIMARY), &monitorInfo);
+            assert(GetMonitorInfoResult);
+
+            DWORD dwStyle = GetWindowLong(window.hwnd, GWL_STYLE);
+            assert(dwStyle & WS_OVERLAPPEDWINDOW);
+            SetWindowLong(window.hwnd, GWL_STYLE, dwStyle & ~WS_OVERLAPPEDWINDOW);
+            SetWindowPos(
+                window.hwnd,
+                HWND_TOP,
+                monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.top,
+                monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
+                SWP_NOOWNERZORDER | SWP_FRAMECHANGED
+            );
+        }
     }
 
     D3D11Renderer d3d11Renderer = D3D11Renderer(window.hwnd);
