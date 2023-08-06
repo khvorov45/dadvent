@@ -149,12 +149,17 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         {
             mu_begin(muctx);
             if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, d3d11Renderer.window.width, d3d11Renderer.window.height), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
-                int[1] widths = [-1];
-                mu_layout_row(muctx, widths.length, widths.ptr, -1);
+                {
+                    int[2] widths = [10, 10];
+                    mu_layout_row(muctx, widths.length, widths.ptr, -1);
+                }
                 
                 mu_begin_panel_ex(muctx, "Log Output", 0);
                 {
-                    mu_layout_row(muctx, widths.length, widths.ptr, -1);
+                    {
+                        int[1] widths = [-1];
+                        mu_layout_row(muctx, widths.length, widths.ptr, -1);
+                    }
                     mu_text(muctx, "log message");
                 }
                 mu_end_panel(muctx);
@@ -176,10 +181,9 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
             case MU_COMMAND_RECT: {
                 mu_RectCommand* rectcmd = cast(mu_RectCommand*)cmd;
-                V2 topleft = V2(rectcmd.rect.x, rectcmd.rect.y);
-                V2 dim = V2(rectcmd.rect.w, rectcmd.rect.h);
+                Rect rect = Rect(rectcmd.rect);
                 Color color = Color(rectcmd.color);
-                d3d11Renderer.pushSolidRect(topleft, dim, color);
+                d3d11Renderer.pushSolidRect(rect, color);
             } break;
 
             case MU_COMMAND_ICON: {
@@ -197,8 +201,11 @@ extern (Windows) int WinMain(HINSTANCE instance) {
             } break;
 
             case MU_COMMAND_CLIP: {
-                // TODO(khvorov) Implement
+                mu_ClipCommand* clipcmd = cast(mu_ClipCommand*)cmd;
+                Rect rect = Rect(clipcmd.rect);
+                d3d11Renderer.clipRect = rect;
             } break;
+
             default: assert(!"unreachable"); break;
             }
         }

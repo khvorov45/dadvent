@@ -152,6 +152,7 @@ long[2] year2022day3(string input) {
 }
 
 T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
+T min(T)(T v1, T v2) => v1 < v2 ? v1 : v2;
 
 struct Arena {
     void[] buf;

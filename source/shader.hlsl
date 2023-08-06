@@ -1,9 +1,9 @@
 struct VSInput {
     uint vertexIndex: SV_VertexID;
     float2 topleft: TOPLEFT;
-    float2 botright: BOTRIGHT;
+    float2 dim: DIM;
     float2 textopleft: TEXTOPLEFT;
-    float2 texbotright: TEXBOTRIGHT;
+    float2 texdim: TEXDIM;
     float4 color: COLOR;
 };
 
@@ -14,11 +14,11 @@ struct PSInput {
 };
 
 cbuffer cbuffer0 : register(b0) {
-    float2 texdim;
+    float2 cbuffer0_texdim;
 }
 
 cbuffer cbuffer1 : register(b1) {
-    float2 vpdim;
+    float2 cbuffer1_vpdim;
 }
 
 sampler sampler0 : register(s0);
@@ -26,22 +26,25 @@ sampler sampler0 : register(s0);
 Texture2D<float4> texture0 : register(t0);
 
 PSInput vs(VSInput input) {
+    float2 botright = input.topleft + input.dim;
+    float2 texbotright = input.textopleft + input.texdim;
+
     float2 vertices[4];
     vertices[0] = input.topleft;
-    vertices[1] = float2(input.botright.x, input.topleft.y);
-    vertices[2] = float2(input.topleft.x, input.botright.y);
-    vertices[3] = input.botright;
+    vertices[1] = float2(botright.x, input.topleft.y);
+    vertices[2] = float2(input.topleft.x, botright.y);
+    vertices[3] = botright;
 
-    float2 vertex = vertices[input.vertexIndex] / vpdim * 2 - 1;
+    float2 vertex = vertices[input.vertexIndex] / cbuffer1_vpdim * 2 - 1;
     vertex.y *= -1;
 
     float2 uvs[4];
     uvs[0] = input.textopleft;
-    uvs[1] = float2(input.texbotright.x, input.textopleft.y);
-    uvs[2] = float2(input.textopleft.x, input.texbotright.y);
-    uvs[3] = input.texbotright;
+    uvs[1] = float2(texbotright.x, input.textopleft.y);
+    uvs[2] = float2(input.textopleft.x, texbotright.y);
+    uvs[3] = texbotright;
 
-    float2 uv = uvs[input.vertexIndex] / texdim;
+    float2 uv = uvs[input.vertexIndex] / cbuffer0_texdim;
 
     PSInput output;
     output.pos = float4(vertex, 0, 1);

@@ -5,6 +5,7 @@ import sysd3d11;
 import font;
 import shader_vs;
 import shader_ps;
+import dadvent;
 
 pragma(lib, "d3d11");
 pragma(lib, "dxguid");
@@ -32,6 +33,45 @@ struct V2 {
         V2 result = V2(x + rhs.x, y + rhs.y);
         return result;
     }
+
+    V2 opBinary(string op: "-")(V2 rhs) {
+        V2 result = V2(x - rhs.x, y - rhs.y);
+        return result;
+    }
+
+    void opOpAssign(string op: "+")(V2 rhs) { 
+        x += rhs.x;
+        y += rhs.y;
+    }
+}
+
+struct Rect {
+    V2 topleft;
+    V2 dim;
+    V2 botright() => topleft + dim;
+
+    this(V2 topleft_, V2 dim_) {
+        topleft = topleft_;
+        dim = dim_;
+    }
+
+    this(mu_Rect murect) {
+        topleft = V2(murect.x, murect.y);
+        dim = V2(murect.w, murect.h);
+    }
+
+    Rect clip(Rect bounds) {
+        float leftClippped = max(topleft.x, bounds.topleft.x);
+        float rightClippped = min(botright.x, bounds.botright.x);
+        float topClippped = max(topleft.y, bounds.topleft.y);
+        float botClippped = min(botright.y, bounds.botright.y);
+
+        rightClippped = max(leftClippped, rightClippped);
+        botClippped = max(topClippped, botClippped);
+
+        Rect result = Rect(V2(leftClippped, topClippped), V2(rightClippped - leftClippped, botClippped - topClippped));
+        return result;
+    }
 }
 
 struct Color {
@@ -50,9 +90,9 @@ struct Color {
 
 struct VSInput {
     V2 topleft;
-    V2 botright;
+    V2 dim;
     V2 textopleft;
-    V2 texbotright;
+    V2 texdim;
     Color color;
 }
 
@@ -63,13 +103,6 @@ struct Font {
 }
 
 struct D3D11Renderer {
-    struct Window {
-        HWND hwnd;
-        int width;
-        int height;
-    }
-    Window window;
-
     ID3D11Device* device;
     ID3D11DeviceContext* context;
     IDXGISwapChain1* swapchain;
@@ -81,6 +114,14 @@ struct D3D11Renderer {
     ID3D11ShaderResourceView* textureView;
     ID3D11SamplerState* sampler;
     ID3D11BlendState* blend;
+    Rect clipRect;
+
+    struct Window {
+        HWND hwnd;
+        int width;
+        int height;
+    }
+    Window window;
 
     struct Rects {
         ID3D11Buffer* buffer;
@@ -101,7 +142,6 @@ struct D3D11Renderer {
         byte[8] pad;
     }
     Font font;
-
 
     extern (C) alias DXGIGetDebugInterfaceType = HRESULT function(IID*, void**);
     this(void* hwnd_) {
@@ -257,9 +297,9 @@ struct D3D11Renderer {
 
             D3D11_INPUT_ELEMENT_DESC[5] desc = [
                 { "TOPLEFT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.topleft.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-                { "BOTRIGHT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.botright.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "DIM", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.dim.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
                 { "TEXTOPLEFT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.textopleft.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-                { "TEXBOTRIGHT", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.texbotright.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "TEXDIM", 0, DXGI_FORMAT_R32G32_FLOAT, 0, VSInput.texdim.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
                 { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, VSInput.color.offsetof, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
             ];
 
@@ -377,6 +417,16 @@ struct D3D11Renderer {
             HRESULT CreateBlendStateResult = device.lpVtbl.CreateBlendState(device, &desc, &blend);
             assert(CreateBlendStateResult == 0);
         }
+
+        // NOTE(khvorov) Init the clip rect
+        {
+            RECT rect;
+            BOOL GetClientRectResult = GetClientRect(window.hwnd, &rect);
+            assert(GetClientRectResult);
+            window.width = rect.right - rect.left;
+            window.height = rect.bottom - rect.top;
+            clipRect = Rect(V2(0, 0), V2(window.width, window.height));
+        }
     }
 
     void destroy() {
@@ -406,22 +456,19 @@ struct D3D11Renderer {
         rects.length += 1;
     }
 
-    void pushSolidRect(V2 topleft, V2 dim, Color color = Color()) {
-        VSInput rect = {
-            topleft, topleft + dim,
-            V2(0, 0), V2(font.chWidth, font.chHeight),
-            color,
-        };
-        pushRect(rect);
+    void pushSolidRect(Rect rect, Color color = Color()) {
+        Rect clipped = rect.clip(clipRect);
+        VSInput input = {clipped.topleft, clipped.dim, V2(0, 0), V2(font.chWidth, font.chHeight), color};
+        pushRect(input);
     }
 
     void pushGlyph(char ch, V2 topleft, Color color = Color()) {
-        V2 textopleft = V2(ch * font.chWidth, 0);
-        VSInput rect = {
-            topleft, V2(topleft.x + font.chWidth, topleft.y + font.chHeight),
-            textopleft, V2(textopleft.x + font.chWidth, textopleft.y + font.chHeight),
-            color,
-        };
+        Rect beforeClip = Rect(topleft, V2(font.chWidth, font.chHeight));
+        Rect clipped = beforeClip.clip(clipRect);
+        V2 texTopleftBeforeClip = V2(ch * font.chWidth, 0);
+        V2 clipTopleftOffset = clipped.topleft - beforeClip.topleft;
+        Rect texAferClip = Rect(texTopleftBeforeClip + clipTopleftOffset, clipped.dim);
+        VSInput rect = {clipped.topleft, clipped.dim, texAferClip.topleft, texAferClip.dim, color};
         pushRect(rect);
     }
 
@@ -472,6 +519,7 @@ struct D3D11Renderer {
                     window.height = height;
                 }
             }
+            clipRect = Rect(V2(0, 0), V2(window.width, window.height));
         }
 
         if (rtview) {
