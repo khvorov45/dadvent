@@ -188,14 +188,19 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
             case MU_COMMAND_ICON: {
                 mu_IconCommand* iconcmd = cast(mu_IconCommand*)cmd;
-                V2 topleft = V2(iconcmd.rect.x, iconcmd.rect.y);
+                Rect iconRect = Rect(iconcmd.rect);
                 Color color = Color(iconcmd.color);
-                // TODO(khvorov) Align the icon?
+
+                V2 glyphRectDim = V2(d3d11Renderer.font.chWidth, d3d11Renderer.font.chHeight);
+                V2 dimdiff = iconRect.dim - glyphRectDim;
+                V2 alignOffset = dimdiff * 0.5;
+                V2 topleftAligned = iconRect.topleft + alignOffset;
+
                 switch (iconcmd.id) {
-                case MU_ICON_CLOSE: d3d11Renderer.pushGlyph('x', topleft, color); break;
-                case MU_ICON_CHECK: d3d11Renderer.pushGlyph('~', topleft, color); break;
-                case MU_ICON_COLLAPSED: d3d11Renderer.pushGlyph('_', topleft, color); break;
-                case MU_ICON_EXPANDED: d3d11Renderer.pushGlyph('o', topleft, color); break;
+                case MU_ICON_CLOSE: d3d11Renderer.pushGlyph('x', topleftAligned, color); break;
+                case MU_ICON_CHECK: d3d11Renderer.pushGlyph('~', topleftAligned, color); break;
+                case MU_ICON_COLLAPSED: d3d11Renderer.pushGlyph('_', topleftAligned, color); break;
+                case MU_ICON_EXPANDED: d3d11Renderer.pushGlyph('o', topleftAligned, color); break;
                 default: assert(!"unreachable"); break;
                 }
             } break;

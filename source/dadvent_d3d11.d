@@ -29,6 +29,11 @@ struct V2 {
         y = cast(float)muvec2.y;
     }
 
+    V2 opBinary(string op)(float rhs) {
+        V2 result = V2(mixin("x", op, "rhs"), mixin("y", op, "rhs"));
+        return result;
+    }
+
     V2 opBinary(string op: "+")(V2 rhs) {
         V2 result = V2(x + rhs.x, y + rhs.y);
         return result;
