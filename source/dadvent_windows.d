@@ -135,10 +135,17 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         }
 
         switch (message.message) {
+        ushort loword(ulong l) => cast(ushort)l;
+        ushort hiword(ulong l) => cast(ushort)(l >>> 16);
+        short getWheelDelta(WPARAM wparam) => cast(SHORT)hiword(wparam);
+
         case WM_QUIT:
             break mainloop;
 
-        // TODO(khvorov) Pass input to ui
+        case WM_MOUSEMOVE: mu_input_mousemove(muctx, loword(message.lParam), hiword(message.lParam)); break;
+        case WM_LBUTTONDOWN: mu_input_mousedown(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
+        case WM_LBUTTONUP: mu_input_mouseup(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
+        case WM_MOUSEWHEEL: mu_input_scroll(muctx, 0, -getWheelDelta(message.wParam)); break;
 
         default:
             TranslateMessage(&message);
@@ -151,9 +158,9 @@ extern (Windows) int WinMain(HINSTANCE instance) {
             if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, d3d11Renderer.window.width, d3d11Renderer.window.height), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
                 {
                     int[2] widths = [10, 10];
-                    mu_layout_row(muctx, widths.length, widths.ptr, -1);
+                    mu_layout_row(muctx, widths.length, widths.ptr, 3000);
                 }
-                
+
                 mu_begin_panel_ex(muctx, "Log Output", 0);
                 {
                     {
@@ -163,7 +170,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
                     mu_text(muctx, "log message");
                 }
                 mu_end_panel(muctx);
-                
+
                 mu_end_window(muctx);
             }
             mu_end(muctx);
