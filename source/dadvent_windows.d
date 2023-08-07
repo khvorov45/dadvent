@@ -113,6 +113,18 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         muctx.text_height = &textHeightProc;
     }
 
+    enum SolutionID {
+        Year2022Day1,
+        Year2022Day2,
+        Year2022Day3,
+    }
+    string[SolutionID.max + 1] SolutionIDStrings;
+    static foreach (ind; SolutionID.min..SolutionID.max + 1) {SolutionIDStrings[ind] = __traits(allMembers, SolutionID)[ind];}
+    struct State {
+        SolutionID activeSolution = SolutionID.Year2022Day1;
+    }
+    State state;
+
     {
         long result = year2022day1(globalInputYear2022day1);
         writeToStdout(fmt(fmt(result), "\n"));
@@ -147,27 +159,70 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         case WM_LBUTTONUP: mu_input_mouseup(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
         case WM_MOUSEWHEEL: mu_input_scroll(muctx, 0, -getWheelDelta(message.wParam)); break;
 
+        case WM_KEYDOWN: {
+            switch (message.wParam) {
+            case VK_UP: {
+                if (state.activeSolution == SolutionID.init) {
+                    state.activeSolution = SolutionID.max;
+                } else {
+                    state.activeSolution -= 1;
+                }
+            } break;
+            case VK_DOWN: {
+                if (state.activeSolution == SolutionID.max) {
+                    state.activeSolution = SolutionID.init;
+                } else {
+                    state.activeSolution += 1;
+                }
+            } break;
+            default: break;
+            }
+        } break;
+
         default:
             TranslateMessage(&message);
             DispatchMessageA(&message);
             break;
         }
 
+        // TODO(khvorov) It takes microui 1 frame to catch up to last input.
         {
             mu_begin(muctx);
             if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, d3d11Renderer.window.width, d3d11Renderer.window.height), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
                 {
-                    int[2] widths = [10, 10];
-                    mu_layout_row(muctx, widths.length, widths.ptr, 3000);
+                    int[2] widths = [200, -1];
+                    mu_layout_row(muctx, widths.length, widths.ptr, -1);
                 }
 
-                mu_begin_panel_ex(muctx, "Log Output", 0);
+                mu_begin_panel_ex(muctx, "SolutionSelector", 0);
+                {
+                    {
+                        int[1] widths = [-1];
+                        mu_layout_row(muctx, widths.length, widths.ptr, 20);
+                    }
+
+                    static foreach (ind; SolutionID.min..SolutionID.max + 1) {{
+                        mu_Color[3] oldColors = muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1];
+                        if (state.activeSolution == mixin("SolutionID." ~ __traits(allMembers, SolutionID)[ind])) {
+                            for (int ind = MU_COLOR_BUTTON; ind <= MU_COLOR_BUTTONFOCUS; ind++) {
+                                muctx.style.colors[ind].r += 25;
+                            }
+                        }
+                        if (mu_button_ex(muctx, __traits(allMembers, SolutionID)[ind], 0, MU_OPT_ALIGNCENTER)) {
+                            state.activeSolution = mixin("SolutionID." ~ __traits(allMembers, SolutionID)[ind]);
+                        }
+                        muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1] = oldColors;
+                    }}
+                }
+                mu_end_panel(muctx);
+
+                mu_begin_panel_ex(muctx, "Solution", 0);
                 {
                     {
                         int[1] widths = [-1];
                         mu_layout_row(muctx, widths.length, widths.ptr, -1);
                     }
-                    mu_text(muctx, "log message");
+                    mu_text(muctx, SolutionIDStrings[state.activeSolution].ptr);
                 }
                 mu_end_panel(muctx);
 
