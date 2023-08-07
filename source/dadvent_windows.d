@@ -14,16 +14,19 @@ import core.sys.windows.windef;
 pragma(lib, "User32");
 pragma(lib, "Gdi32");
 
-extern (Windows) int WinMain(HINSTANCE instance) {
+extern (Windows) int WinMain(HINSTANCE instance) {    
+    runTests();
+
+    Arena arena;
+    CircularBuffer circularBuffer;
     {
         long size = 1 * 1024 * 1024 * 1024;
-        void* ptr = allocvmem(size);
-        globalMemory.arena = Arena(ptr[0 .. size]);
-        void[] buf = alloc(globalMemory.arena.buf.length / 2);
-        globalMemory.circularBuffer = CircularBuffer(Arena(buf));
+        void* ptr = VirtualAlloc(null, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        assert(ptr);
+        arena = Arena(ptr[0 .. size]);
+        void[] buf = arena.alloc(arena.buf.length / 2);
+        circularBuffer = CircularBuffer(Arena(buf));
     }
-
-    runTests();
 
     HWND hwnd;
     {
@@ -92,7 +95,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
     D3D11Renderer d3d11Renderer = D3D11Renderer(hwnd);
 
-    mu_Context* muctx = cast(mu_Context*)alloc(mu_Context.sizeof).ptr;
+    mu_Context* muctx = cast(mu_Context*)arena.alloc(mu_Context.sizeof, 8).ptr;
     mu_init(muctx);
     {
         muctx.style.font = &d3d11Renderer.font;
@@ -125,19 +128,20 @@ extern (Windows) int WinMain(HINSTANCE instance) {
     }
     State state;
 
+    // TODO(khvorov) Temp output
     {
         long result = year2022day1(globalInputYear2022day1);
-        writeToStdout(fmt(fmt(result), "\n"));
+        OutputDebugStringA(StringBuilder(arena).fmt(result).fmt("\n").endNull().ptr);
     }
 
     {
         long[2] result = year2022day2(globalInputYear2022day2);
-        writeToStdout(fmt(fmt(result[0]), " ", fmt(result[1]), "\n"));
+        OutputDebugStringA(StringBuilder(arena).fmt(result).fmt("\n").endNull().ptr);
     }
 
     {
         long[2] result = year2022day3(globalInputYear2022day3);
-        writeToStdout(fmt(fmt(result[0]), " ", fmt(result[1]), "\n"));
+        OutputDebugStringA(StringBuilder(arena).fmt(result).fmt("\n").endNull().ptr);
     }
 
     mainloop: for (;;) {
@@ -222,7 +226,15 @@ extern (Windows) int WinMain(HINSTANCE instance) {
                         int[1] widths = [-1];
                         mu_layout_row(muctx, widths.length, widths.ptr, -1);
                     }
+
                     mu_text(muctx, SolutionIDStrings[state.activeSolution].ptr);
+
+                    // TODO(khvorov) Fill
+                    final switch(state.activeSolution) {
+                        case SolutionID.Year2022Day1: break;
+                        case SolutionID.Year2022Day2: break;
+                        case SolutionID.Year2022Day3: break;
+                    }
                 }
                 mu_end_panel(muctx);
 
@@ -282,56 +294,4 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
     d3d11Renderer.destroy();
     return 0;
-}
-
-void writeToStdout(string msg) {
-
-    DWORD written = 0;
-    BOOL writeFileResult = WriteFile(cast(HANDLE)STD_OUTPUT_HANDLE, msg.ptr, cast(uint)msg.length, &written, null);
-    if (writeFileResult) {
-        assert(written == msg.length);
-    }
-
-    string msg0 = tempNullTerm(msg);
-    OutputDebugStringA(msg0.ptr);
-}
-
-void* allocvmem(long size) {
-    void* ptr = null;
-
-    ptr = VirtualAlloc(null, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    assert(ptr);
-
-    return ptr;
-}
-
-string readEntireFile(string path) {
-    string content = "";
-    char* ptr = cast(char*)globalMemory.arena.freeptr;
-    long size = 0;
-
-    string path0 = tempNullTerm(path);
-
-    HANDLE handle = CreateFileA(
-        path0.ptr,
-        GENERIC_READ,
-        FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
-        null,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        null,
-    );
-    assert(handle != INVALID_HANDLE_VALUE);
-    scope (exit)
-        CloseHandle(handle);
-
-    DWORD bytesRead = 0;
-    BOOL readFileResult = ReadFile(handle, ptr, cast(uint)globalMemory.arena.freesize, &bytesRead, null);
-    assert(readFileResult);
-    size = bytesRead;
-
-    globalMemory.arena.used = globalMemory.arena.used + size;
-
-    content = cast(string)ptr[0 .. size];
-    return content;
 }

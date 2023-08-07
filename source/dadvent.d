@@ -153,6 +153,23 @@ long[2] year2022day3(string input) {
 
 T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
 T min(T)(T v1, T v2) => v1 < v2 ? v1 : v2;
+bool isPowerOf2(long val) => val > 0 && ((val & (val - 1)) == 0);
+
+long getAlignOffset(ulong ptr, long alignment) {
+    assert(isPowerOf2(alignment));
+    ulong mask = alignment - 1;
+    ulong ptrMasked = ptr & mask;
+    ulong offset = 0;
+    if (ptrMasked) {
+        offset = alignment - ptrMasked;
+    }
+    return offset;
+}
+
+long getAlignOffset(void* ptr, long alignment) {
+    long result = getAlignOffset(cast(ulong)ptr, alignment);
+    return result;
+}
 
 struct Arena {
     void[] buf;
@@ -167,43 +184,35 @@ struct Arena {
 
     void* freeptr() => buf.ptr + used;
     long freesize() => buf.length - used;
-}
 
-void[] alloc(ref Arena arena, long size) {
-    // TODO(khvorov) Alignment?
-    long newUsed = arena.used + size;
-    void[] result = arena.buf[arena.used .. newUsed];
-    arena.used = newUsed;
-    return result;
+    void alignto(long alignment) {
+        long offset = getAlignOffset(freeptr, alignment);
+        used = used + offset;
+    }
+
+    void[] alloc(long size, long alignment = 1) {
+        alignto(alignment);
+        long newUsed = used + size;
+        void[] result = buf[used .. newUsed];
+        used = newUsed;
+        return result;
+    }
 }
 
 struct CircularBuffer {
     Arena arena;
-    alias arena this;
-}
 
-void[] alloc(ref CircularBuffer cb, long size) {
-    if (size > cb.freesize) {
-        cb.used = 0;
+    void[] alloc(long size, long alignment = 1) {
+        arena.used = 0;
+        void[] result = arena.alloc(size, alignment);
+        return result;
     }
-    void[] result = alloc(cb.arena, size);
-    return result;
 }
 
-struct Memory {
-    Arena arena;
-    CircularBuffer circularBuffer;
-}
-
-Memory globalMemory;
-
-void[] alloc(long size) => alloc(globalMemory.arena, size);
-void[] talloc(long size) => alloc(globalMemory.circularBuffer, size);
-
-string tempNullTerm(string str) {
+string getNullTerm(ref Arena arena, string str) {
     import core.stdc.string;
 
-    char[] buf = cast(char[])talloc(str.length + 1);
+    char[] buf = cast(char[])arena.alloc(str.length + 1);
     memcpy(buf.ptr, str.ptr, str.length);
     buf[str.length] = 0;
 
@@ -257,45 +266,67 @@ struct LineRange {
     }
 }
 
-string fmt(long number) {
-    assert(number >= 0);
-    long maxpow10 = 1;
-    long digitCount = 1;
-    while (number / maxpow10 >= 10) {
-        maxpow10 *= 10;
-        digitCount += 1;
+struct StringBuilder {
+    Arena arena;
+    char* ptr;
+
+    this(Arena arena_) {
+        arena = arena_;
+        ptr = cast(char*)arena.freeptr;
     }
 
-    char[] buf = cast(char[])alloc(digitCount);
-    long curnumber = number;
-    long curDigitInd = 0;
-    for (long curpow10 = maxpow10; curpow10; curpow10 /= 10) {
-        long digit = curnumber / curpow10;
-        assert(digit >= 0 && digit <= 9);
-        curnumber -= digit * curpow10;
+    ref StringBuilder fmt(long number) {
+        assert(number >= 0);
+        long maxpow10 = 1;
+        long digitCount = 1;
+        while (number / maxpow10 >= 10) {
+            maxpow10 *= 10;
+            digitCount += 1;
+        }
 
-        char ch = cast(char)((cast(char)digit) + '0');
-        buf[curDigitInd] = ch;
-        curDigitInd += 1;
+        char[] buf = cast(char[])arena.alloc(digitCount);
+        long curnumber = number;
+        long curDigitInd = 0;
+        for (long curpow10 = maxpow10; curpow10; curpow10 /= 10) {
+            long digit = curnumber / curpow10;
+            assert(digit >= 0 && digit <= 9);
+            curnumber -= digit * curpow10;
+
+            char ch = cast(char)((cast(char)digit) + '0');
+            buf[curDigitInd] = ch;
+            curDigitInd += 1;
+        }
+
+        return this;
     }
 
-    string result = cast(string)buf;
-    return result;
-}
-
-string fmt(string[] arr...) {
-    char* ptr = cast(char*)globalMemory.arena.freeptr;
-    long len = 0;
-    foreach (arg; arr) {
-        import core.stdc.string;
-
-        char[] thisArg = cast(char[])alloc(arg.length);
-        memcpy(thisArg.ptr, arg.ptr, arg.length);
-
-        len += arg.length;
+    ref StringBuilder fmt(long[] arr) {
+        foreach(ind, val; arr) {fmt(val); if (ind < arr.length - 1) fmt(" ");}
+        return this;
     }
-    string result = cast(string)ptr[0 .. len];
-    return result;
+
+    ref StringBuilder fmt(string[] arr...) {
+        foreach (arg; arr) {
+            import core.stdc.string;
+            char[] thisArg = cast(char[])arena.alloc(arg.length);
+            memcpy(thisArg.ptr, arg.ptr, arg.length);
+        }
+        return this;
+    }
+
+    string end() {
+        long len = cast(char*)arena.freeptr - ptr;
+        string result = cast(string)ptr[0..len];
+        return result;
+    }
+
+    string endNull() {
+        char* endptr = cast(char*)arena.alloc(1);
+        endptr[0] = '\0';
+        long len = ptr - endptr;
+        string result = cast(string)ptr[0..len];
+        return result;
+    }
 }
 
 bool strstarts(string str, string prefix) {
@@ -309,29 +340,58 @@ bool strstarts(string str, string prefix) {
 
 void runTests() {
     {
+        assert(isPowerOf2(1));
+        assert(isPowerOf2(2));
+        assert(isPowerOf2(4));
+        assert(isPowerOf2(1024));
+
+        assert(!isPowerOf2(3));
+        assert(!isPowerOf2(31));
+        assert(!isPowerOf2(21336));
+    }
+
+    {
+        assert(getAlignOffset(7, 1) == 0);
+        assert(getAlignOffset(16, 1) == 0);
+        assert(getAlignOffset(23, 1) == 0);
+        assert(getAlignOffset(1235, 1) == 0);
+
+        assert(getAlignOffset(11, 2) == 1);
+        assert(getAlignOffset(12, 2) == 0);
+        assert(getAlignOffset(13, 2) == 1);
+
+        assert(getAlignOffset(15, 8) == 1);
+    }
+
+    {
         char[64] buf;
         Arena arena = Arena(buf);
-
-        void[] a1 = alloc(arena, 10);
+        void[] a1 = arena.alloc(10);
         assert(a1.ptr == buf.ptr);
         assert(a1.length == 10);
         assert(arena.buf == buf);
         assert(arena.freeptr == arena.buf.ptr + 10);
         assert(arena.freesize == 54);
 
-        void[] a2 = alloc(arena, 20);
+        void[] a2 = arena.alloc(20);
         assert(a2.ptr == buf.ptr + 10);
         assert(a2.length == 20);
         assert(arena.buf == buf);
         assert(arena.freeptr == arena.buf.ptr + 30);
         assert(arena.freesize == 34);
+
+        arena.used_ = 0;
+        void[] _ = arena.alloc(1);
+        assert(getAlignOffset(arena.freeptr, 4) > 0);
+        void[] a3 = arena.alloc(10, 4);
+        assert(getAlignOffset(a3.ptr, 4) == 0);
     }
 
     {
         char[64] buf;
         CircularBuffer cb = CircularBuffer(Arena(buf));
-        void[] a1 = alloc(cb, 10);
-        void[] a2 = alloc(cb, 64);
+        void[] a1 = cb.alloc(10);
+        void[] a2 = cb.alloc(64);
         assert(a1.ptr == a2.ptr);
     }
 
@@ -386,29 +446,38 @@ void runTests() {
     }
 
     {
-        string wholeString = cast(string)globalMemory.arena.freeptr[0 .. 6];
-        assert(fmt(0) == "0");
-        assert(fmt(5) == "5");
-        assert(fmt(1234) == "1234");
-        assert(wholeString == "051234");
+        char[64] buf;
+        Arena arena = Arena(buf);
+        assert(StringBuilder(arena).fmt(0).fmt(5).fmt(1234).end() == "051234");
     }
 
     {
-        assert(fmt("1", "22", "333") == "122333");
+        char[64] buf;
+        Arena arena = Arena(buf);
+        long[3] arr = [0L, 1L, 2L];
+        assert(StringBuilder(arena).fmt(arr).end() == "0 1 2");
     }
 
     {
+        char[64] buf;
+        Arena arena = Arena(buf);
+        assert(StringBuilder(arena).fmt("1", "22", "333").end() == "122333");
+    }
+
+    {
+        char[64] buf;
+        Arena arena = Arena(buf);
         string str = "12345678";
         string strSlice = str[1 .. str.length - 1];
         assert(strSlice.ptr[strSlice.length] == '8');
-        string strSlice0 = tempNullTerm(strSlice);
+        string strSlice0 = getNullTerm(arena, strSlice);
         assert(strSlice0 == "234567");
         assert(strSlice0.ptr[strSlice0.length] == 0);
     }
 }
 
 // NOTE(khvorov) The below is from the D runtime.
-// Runtime should be disabled with -betterC 
+// Runtime should be disabled with -betterC
 // but the call to this function is generated anyway which results in a link error.
 
 extern (C) void[]* _memset128ii(void[]* p, void[] value, size_t count) {
