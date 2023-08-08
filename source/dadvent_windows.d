@@ -18,14 +18,14 @@ extern (Windows) int WinMain(HINSTANCE instance) {
     runTests();
 
     Arena arena;
-    CircularBuffer circularBuffer;
+    CircularBuffer scratch;
     {
         long size = 1 * 1024 * 1024 * 1024;
         void* ptr = VirtualAlloc(null, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         assert(ptr);
         arena = Arena(ptr[0 .. size]);
         void[] buf = arena.alloc(arena.buf.length / 2);
-        circularBuffer = CircularBuffer(Arena(buf));
+        scratch = CircularBuffer(Arena(buf));
     }
 
     HWND hwnd;
@@ -130,7 +130,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
     // TODO(khvorov) Temp output
     {
-        long result = year2022day1(globalInputYear2022day1);
+        long result = year2022day1(globalInputYear2022day1, arena, scratch);
         OutputDebugStringA(StringBuilder(arena).fmt(result).fmt("\n").endNull().ptr);
     }
 

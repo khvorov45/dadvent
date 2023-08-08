@@ -1,9 +1,23 @@
 module dadvent;
 
-long year2022day1(string input) {
+struct Year2022Day1Result {
+    int* calories;
+    int* itemCounts;
+    int* sums;
+    int elfCount;
+    int maxSum;
+}
+
+long year2022day1(string input, ref Arena arena, ref CircularBuffer scratch) {
     LineRange lines = LineRange(input);
-    long thisSum = 0;
-    long maxSum = 0;
+    int thisSum = 0;
+    int maxSum = 0;
+
+    // TODO(khvorov) Fill the arrays with appropriate data and copy the results to the arena.
+    // These arrays should probably be "dynamic" as we need to keep track of how many elements we filled
+    int[] caloriesScratch = scratch.arena.alloc!(int)(scratch.arena.buf.length / 3);
+    int[] itemCountsScratch = scratch.arena.alloc!(int)(scratch.arena.buf.length / 3);
+    int[] sumsScratch = scratch.arena.alloc!(int)(scratch.arena.freesize);
     foreach (line; lines) {
         if (line.length > 0) {
             long number = parseInt(line);
@@ -191,10 +205,28 @@ struct Arena {
     }
 
     void[] alloc(long size, long alignment = 1) {
+        assert(size >= 0);
         alignto(alignment);
         long newUsed = used + size;
         void[] result = buf[used .. newUsed];
         used = newUsed;
+        return result;
+    }
+
+    T[] alloc(T)(long size, long alignment = T.alignof) {
+        assert(isPowerOf2(alignment));
+        long wholeSize = size & (~(alignment - 1));
+        void[] voidbuf = alloc(wholeSize, alignment);
+
+        // NOTE(khvorov) D compiler is bad and does not insert whatever internal function it needs into the executable to make this work automatically
+        // So I have to implement the cast manually
+        To[] arrcast(To, From)(From[] v1) {
+            ulong length = v1.length * From.sizeof / To.sizeof;
+            To[] result = (cast(To*)v1.ptr)[0..length];
+            return result;
+        }
+
+        T[] result = arrcast!(T)(voidbuf);
         return result;
     }
 }
