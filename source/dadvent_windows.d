@@ -130,8 +130,10 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
     // TODO(khvorov) Temp output
     {
-        long result = year2022day1(globalInputYear2022day1, arena, scratch);
-        OutputDebugStringA(StringBuilder(arena).fmt(result).fmt("\n").endNull().ptr);
+        Year2022Day1Result result = year2022day1(globalInputYear2022day1, arena, scratch);
+        assert(result.maxSums[0] == 68802);
+        assert(result.top3sum == 205370);
+        OutputDebugStringA(StringBuilder(arena).fmt(result.maxSums[0]).fmt(" ").fmt(result.top3sum).fmt("\n").endNull().ptr);
     }
 
     {

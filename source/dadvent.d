@@ -1,33 +1,70 @@
 module dadvent;
 
+import core.stdc.string : memcpy, memset;
+
 struct Year2022Day1Result {
     int* calories;
     int* itemCounts;
     int* sums;
     int elfCount;
-    int maxSum;
+    int[3] maxSums;
+    int top3sum;
 }
 
-long year2022day1(string input, ref Arena arena, ref Arena scratch) {
+Year2022Day1Result year2022day1(string input, ref Arena arena, ref Arena scratch) {
     LineRange lines = LineRange(input);
     int thisSum = 0;
-    int maxSum = 0;
+    int thisItemCount = 0;
+    int[3] maxSums;
 
-    // TODO(khvorov) Fill the arrays with appropriate data and copy the results to the arena.
-    // These arrays should probably be "dynamic" as we need to keep track of how many elements we filled
-    int[] caloriesScratch = scratch.alloc!(int)(scratch.buf.length / 3);
-    int[] itemCountsScratch = scratch.alloc!(int)(scratch.buf.length / 3);
-    int[] sumsScratch = scratch.alloc!(int)(scratch.freesize);
-    foreach (line; lines) {
-        if (line.length > 0) {
-            long number = parseInt(line);
+    DynArr!int caloriesScratch = DynArr!int(scratch, scratch.buf.length / 3);
+    DynArr!int itemCountsScratch = DynArr!int(scratch, scratch.buf.length / 3);
+    DynArr!int sumsScratch = DynArr!int(scratch, scratch.freesize);
+    for (;;) {
+        string thisLine = lines.line;
+        if (thisLine.length > 0) {
+            long number = parseInt(thisLine);
+            caloriesScratch.push(cast(int)number);
             thisSum += number;
-        } else {
-            maxSum = max(maxSum, thisSum);
+            thisItemCount += 1;
+        }
+        lines.popFront();
+
+        if (thisLine.length == 0 || lines.empty) {
+            sumsScratch.push(thisSum);
+            itemCountsScratch.push(thisItemCount);
+            if (thisSum > maxSums[0]) {
+                maxSums[2] = maxSums[1];
+                maxSums[1] = maxSums[0];
+                maxSums[0] = thisSum;
+            } else if (thisSum > maxSums[1]) {
+                maxSums[2] = maxSums[1];
+                maxSums[1] = thisSum;
+            } else if (thisSum > maxSums[2]) {
+                maxSums[2] = thisSum;
+            }
             thisSum = 0;
+            thisItemCount = 0;
+            if (lines.empty) {
+                break;
+            }
         }
     }
-    return maxSum;
+
+    int[] calories = caloriesScratch.copy(arena);
+    int[] itemCounts = itemCountsScratch.copy(arena);
+    int[] sums = sumsScratch.copy(arena);
+    assert(itemCounts.length == sums.length);
+
+    Year2022Day1Result result = {
+        calories: calories.ptr,
+        itemCounts: itemCounts.ptr,
+        sums: sums.ptr,
+        elfCount: cast(int)sums.length,
+        maxSums: maxSums,
+        top3sum: maxSums[0] + maxSums[1] + maxSums[2],
+    };
+    return result;
 }
 
 long[2] year2022day2(string input) {
@@ -136,8 +173,6 @@ long[2] year2022day3(string input) {
         assert(foundShared);
 
         if (curGroupLineIndex == 2) {
-            import core.stdc.string : memset;
-
             bool foundBadge = false;
             for (long priority = 1; priority <= maxPriority; priority++) {
                 bool g0 = groupLinePriorities[0][priority];
@@ -226,7 +261,7 @@ struct Arena {
             return result;
         }
 
-        T[] result = arrcast!(T)(voidbuf);
+        T[] result = arrcast!T(voidbuf);
         return result;
     }
 }
@@ -277,6 +312,28 @@ struct LineRange {
     }
 }
 
+struct DynArr(T) {
+    T[] buf;
+    long len;
+
+    this(ref Arena arena, long bytes) {
+        buf = arena.alloc!(T)(bytes);
+        len = 0;
+    }
+
+    void push(T val) {
+        buf[len] = val;
+        len += 1;
+    }
+
+    T[] copy(ref Arena arena) {
+        long bytes = len * T.sizeof;
+        T[] result = arena.alloc!T(bytes, T.alignof);
+        memcpy(result.ptr, buf.ptr, bytes);
+        return result;
+    }
+}
+
 struct StringBuilder {
     Arena arena;
     char* ptr;
@@ -318,7 +375,6 @@ struct StringBuilder {
 
     ref StringBuilder fmt(string[] arr...) {
         foreach (arg; arr) {
-            import core.stdc.string;
             char[] thisArg = cast(char[])arena.alloc(arg.length);
             memcpy(thisArg.ptr, arg.ptr, arg.length);
         }
@@ -471,6 +527,45 @@ void runTests() {
         char[64] buf;
         Arena arena = Arena(buf);
         assert(StringBuilder(arena).fmt("1", "22", "333").end() == "122333");
+    }
+
+    {
+        char[1024] buf1;
+        char[1024] buf2;
+        Arena arena = Arena(buf1);
+        Arena scratch = Arena(buf2);
+        string[2] testInput = [
+"1000
+2000
+3000
+
+4000
+
+5000
+6000
+
+7000
+8000
+9000
+
+10000",
+
+"24000
+10000
+11000"
+        ];
+
+        int[testInput.length] topMaxSum = [24000, 45000];
+        int[testInput.length] top3sum = [45000, 45000];
+        int[testInput.length] elvesCount = [5, 1];
+        foreach(inputIndex, input; testInput) {
+            arena.used = 0;
+            scratch.used = 0;
+            Year2022Day1Result result = year2022day1(input, arena, scratch);
+            assert(result.maxSums[0] == topMaxSum[inputIndex]);
+            assert(result.top3sum == top3sum[inputIndex]);
+            assert(result.elfCount == elvesCount[inputIndex]);
+        }
     }
 }
 
