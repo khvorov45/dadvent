@@ -8,16 +8,16 @@ struct Year2022Day1Result {
     int maxSum;
 }
 
-long year2022day1(string input, ref Arena arena, ref CircularBuffer scratch) {
+long year2022day1(string input, ref Arena arena, ref Arena scratch) {
     LineRange lines = LineRange(input);
     int thisSum = 0;
     int maxSum = 0;
 
     // TODO(khvorov) Fill the arrays with appropriate data and copy the results to the arena.
     // These arrays should probably be "dynamic" as we need to keep track of how many elements we filled
-    int[] caloriesScratch = scratch.arena.alloc!(int)(scratch.arena.buf.length / 3);
-    int[] itemCountsScratch = scratch.arena.alloc!(int)(scratch.arena.buf.length / 3);
-    int[] sumsScratch = scratch.arena.alloc!(int)(scratch.arena.freesize);
+    int[] caloriesScratch = scratch.alloc!(int)(scratch.buf.length / 3);
+    int[] itemCountsScratch = scratch.alloc!(int)(scratch.buf.length / 3);
+    int[] sumsScratch = scratch.alloc!(int)(scratch.freesize);
     foreach (line; lines) {
         if (line.length > 0) {
             long number = parseInt(line);
@@ -231,27 +231,6 @@ struct Arena {
     }
 }
 
-struct CircularBuffer {
-    Arena arena;
-
-    void[] alloc(long size, long alignment = 1) {
-        arena.used = 0;
-        void[] result = arena.alloc(size, alignment);
-        return result;
-    }
-}
-
-string getNullTerm(ref Arena arena, string str) {
-    import core.stdc.string;
-
-    char[] buf = cast(char[])arena.alloc(str.length + 1);
-    memcpy(buf.ptr, str.ptr, str.length);
-    buf[str.length] = 0;
-
-    string result = cast(string)(buf[0 .. buf.length - 1]);
-    return result;
-}
-
 long parseInt(string str) {
     long result = 0;
     long curpow10 = 1;
@@ -355,7 +334,7 @@ struct StringBuilder {
     string endNull() {
         char* endptr = cast(char*)arena.alloc(1);
         endptr[0] = '\0';
-        long len = ptr - endptr;
+        long len = endptr - ptr;
         string result = cast(string)ptr[0..len];
         return result;
     }
@@ -420,14 +399,6 @@ void runTests() {
     }
 
     {
-        char[64] buf;
-        CircularBuffer cb = CircularBuffer(Arena(buf));
-        void[] a1 = cb.alloc(10);
-        void[] a2 = cb.alloc(64);
-        assert(a1.ptr == a2.ptr);
-    }
-
-    {
         assert(parseInt("0") == 0);
         assert(parseInt("123") == 123);
     }
@@ -481,6 +452,12 @@ void runTests() {
         char[64] buf;
         Arena arena = Arena(buf);
         assert(StringBuilder(arena).fmt(0).fmt(5).fmt(1234).end() == "051234");
+        arena.used = 0;
+        assert(StringBuilder(arena).fmt(123).end() == "123");
+        assert(buf[3] == '2');
+        arena.used = 0;
+        assert(StringBuilder(arena).fmt(123).endNull() == "123");
+        assert(buf[3] == '\0');
     }
 
     {
@@ -494,17 +471,6 @@ void runTests() {
         char[64] buf;
         Arena arena = Arena(buf);
         assert(StringBuilder(arena).fmt("1", "22", "333").end() == "122333");
-    }
-
-    {
-        char[64] buf;
-        Arena arena = Arena(buf);
-        string str = "12345678";
-        string strSlice = str[1 .. str.length - 1];
-        assert(strSlice.ptr[strSlice.length] == '8');
-        string strSlice0 = getNullTerm(arena, strSlice);
-        assert(strSlice0 == "234567");
-        assert(strSlice0.ptr[strSlice0.length] == 0);
     }
 }
 

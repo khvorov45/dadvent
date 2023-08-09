@@ -18,14 +18,14 @@ extern (Windows) int WinMain(HINSTANCE instance) {
     runTests();
 
     Arena arena;
-    CircularBuffer scratch;
+    Arena scratch;
     {
         long size = 1 * 1024 * 1024 * 1024;
         void* ptr = VirtualAlloc(null, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         assert(ptr);
         arena = Arena(ptr[0 .. size]);
         void[] buf = arena.alloc(arena.buf.length / 2);
-        scratch = CircularBuffer(Arena(buf));
+        scratch = Arena(buf);
     }
 
     HWND hwnd;
