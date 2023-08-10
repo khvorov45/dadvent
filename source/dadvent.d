@@ -12,6 +12,8 @@ struct Year2022Day1Result {
 }
 
 Year2022Day1Result year2022day1(string input, ref Arena arena, ref Arena scratch) {
+    TempMemory _TEMP_ = TempMemory(scratch);
+
     LineRange lines = LineRange(input);
     int thisSum = 0;
     int thisItemCount = 0;
@@ -231,6 +233,13 @@ struct Arena {
         used_ = newUsed;
     }
 
+    long tempCount_;
+    @property tempCount() => tempCount_;
+    @property void tempCount(long newTempCount) {
+        assert(newTempCount >= 0);
+        tempCount_ = newTempCount;
+    }
+
     void* freeptr() => buf.ptr + used;
     long freesize() => buf.length - used;
 
@@ -263,6 +272,26 @@ struct Arena {
 
         T[] result = arrcast!T(voidbuf);
         return result;
+    }
+}
+
+struct TempMemory {
+    long usedAtBegin;
+    long tempCountAtBegin;
+    Arena* arena;
+
+    this(ref Arena arena_) {
+        arena = &arena_;
+        usedAtBegin = arena.used;
+        tempCountAtBegin = arena.tempCount;
+        arena.tempCount = arena.tempCount + 1;
+    }
+
+    ~this() {
+        assert(arena.used_ >= usedAtBegin);
+        assert(arena.tempCount == tempCountAtBegin + 1);
+        arena.used = usedAtBegin;
+        arena.tempCount = arena.tempCount - 1;
     }
 }
 

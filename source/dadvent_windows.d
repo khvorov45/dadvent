@@ -14,7 +14,7 @@ import core.sys.windows.windef;
 pragma(lib, "User32");
 pragma(lib, "Gdi32");
 
-extern (Windows) int WinMain(HINSTANCE instance) {    
+extern (Windows) int WinMain(HINSTANCE instance) {
     runTests();
 
     Arena arena;
@@ -128,14 +128,11 @@ extern (Windows) int WinMain(HINSTANCE instance) {
     }
     State state;
 
-    // TODO(khvorov) Temp output
-    {
-        Year2022Day1Result result = year2022day1(globalInputYear2022day1, arena, scratch);
-        assert(result.maxSums[0] == 68802);
-        assert(result.top3sum == 205370);
-        OutputDebugStringA(StringBuilder(arena).fmt(result.maxSums[0]).fmt(" ").fmt(result.top3sum).fmt("\n").endNull().ptr);
-    }
+    Year2022Day1Result resultYear2020day1 = year2022day1(globalInputYear2022day1, arena, scratch);
+    assert(resultYear2020day1.maxSums[0] == 68802);
+    assert(resultYear2020day1.top3sum == 205370);
 
+    // TODO(khvorov) Temp output
     {
         long[2] result = year2022day2(globalInputYear2022day2);
         OutputDebugStringA(StringBuilder(arena).fmt(result).fmt("\n").endNull().ptr);
@@ -147,6 +144,11 @@ extern (Windows) int WinMain(HINSTANCE instance) {
     }
 
     mainloop: for (;;) {
+        assert(scratch.used_ == 0);
+        assert(scratch.tempCount_ == 0);
+        assert(arena.tempCount_ == 0);
+        TempMemory _TEMP_ = TempMemory(scratch);
+
         MSG message;
         if (GetMessageA(&message, hwnd, 0, 0) == -1) {
             break mainloop;
@@ -224,16 +226,28 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
                 mu_begin_panel_ex(muctx, "Solution", 0);
                 {
-                    {
-                        int[1] widths = [-1];
-                        mu_layout_row(muctx, widths.length, widths.ptr, -1);
-                    }
-
-                    mu_text(muctx, SolutionIDStrings[state.activeSolution].ptr);
 
                     // TODO(khvorov) Fill
                     final switch(state.activeSolution) {
-                        case SolutionID.Year2022Day1: break;
+                        case SolutionID.Year2022Day1: {
+                            Year2022Day1Result result = resultYear2020day1;
+
+                            // NOTE(khvorov) Result string
+                            {
+                                int[1] widths = [-1];
+                                mu_layout_row(muctx, widths.length, widths.ptr, cast(int)d3d11Renderer.font.chHeight);
+                                string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(result.maxSums[0]).fmt(" Part 2: ").fmt(result.top3sum).endNull();
+                                mu_text(muctx, resultStr.ptr);
+                            }
+
+                            // NOTE(khvorov) Result graph
+                            {
+                                int[1] widths = [-1];
+                                mu_layout_row(muctx, widths.length, widths.ptr, -1);
+                                mu_text(muctx, "TEMP");
+                            }
+                        } break;
+
                         case SolutionID.Year2022Day2: break;
                         case SolutionID.Year2022Day3: break;
                     }
