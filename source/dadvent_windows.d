@@ -165,7 +165,15 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         case WM_MOUSEMOVE: mu_input_mousemove(muctx, loword(message.lParam), hiword(message.lParam)); break;
         case WM_LBUTTONDOWN: mu_input_mousedown(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
         case WM_LBUTTONUP: mu_input_mouseup(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
-        case WM_MOUSEWHEEL: mu_input_scroll(muctx, 0, -getWheelDelta(message.wParam)); break;
+        case WM_MOUSEWHEEL: {
+            ushort mods = loword(message.wParam);
+            bool shift = (mods & MK_SHIFT) != 0;
+            if (shift) {
+                mu_input_scroll(muctx, -getWheelDelta(message.wParam), 0);
+            } else {
+                mu_input_scroll(muctx, 0, -getWheelDelta(message.wParam));
+            }
+        } break;
 
         case WM_KEYDOWN: {
             switch (message.wParam) {
@@ -195,19 +203,26 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
         // TODO(khvorov) It takes microui 1 frame to catch up to last input.
         {
+            void layout_row(int count)(int[count] widths, int height) {
+                mu_layout_row(muctx, cast(int)widths.length, widths.ptr, height);
+            }
+
+            int scale(int val, int ogMin, int ogMax, int newMin, int newMax) {
+                int ogRange = ogMax - ogMin;
+                float val01 = cast(float)(val - ogMin) / cast(float)ogRange;
+                int newRange = newMax - newMin;
+                float newvalFloat = val01 * cast(float)newRange + cast(float)newMin;
+                int newvalInt = cast(int)newvalFloat;
+                return newvalInt; 
+            }
+
             mu_begin(muctx);
             if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, d3d11Renderer.window.width, d3d11Renderer.window.height), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
-                {
-                    int[2] widths = [200, -1];
-                    mu_layout_row(muctx, widths.length, widths.ptr, -1);
-                }
+                layout_row([200, -1], -1);
 
                 mu_begin_panel_ex(muctx, "SolutionSelector", 0);
                 {
-                    {
-                        int[1] widths = [-1];
-                        mu_layout_row(muctx, widths.length, widths.ptr, 20);
-                    }
+                    layout_row([-1], 20);
 
                     static foreach (ind; SolutionID.min..SolutionID.max + 1) {{
                         mu_Color[3] oldColors = muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1];
@@ -226,26 +241,38 @@ extern (Windows) int WinMain(HINSTANCE instance) {
 
                 mu_begin_panel_ex(muctx, "Solution", 0);
                 {
-
                     // TODO(khvorov) Fill
                     final switch(state.activeSolution) {
                         case SolutionID.Year2022Day1: {
                             Year2022Day1Result result = resultYear2020day1;
 
-                            // NOTE(khvorov) Result string
+                            layout_row([-1], cast(int)d3d11Renderer.font.chHeight * 2);
+                            mu_begin_panel_ex(muctx, "SolutionResultString", MU_OPT_NOFRAME);
                             {
-                                int[1] widths = [-1];
-                                mu_layout_row(muctx, widths.length, widths.ptr, cast(int)d3d11Renderer.font.chHeight);
+                                layout_row([-1], cast(int)d3d11Renderer.font.chHeight);
                                 string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(result.maxSums[0]).fmt(" Part 2: ").fmt(result.top3sum).endNull();
                                 mu_text(muctx, resultStr.ptr);
                             }
+                            mu_end_panel(muctx);
 
-                            // NOTE(khvorov) Result graph
+                            layout_row([-1], -1);
+                            mu_begin_panel_ex(muctx, "SolutionResultGraph", MU_OPT_NOFRAME);
                             {
-                                int[1] widths = [-1];
-                                mu_layout_row(muctx, widths.length, widths.ptr, -1);
-                                mu_text(muctx, "TEMP");
+                                int rectWidth = 10;
+                                int rectPad = 5;
+                                int totalWidth = rectWidth * result.elfCount + rectPad * (result.elfCount - 1);
+                                layout_row([totalWidth], -1);
+                                mu_Rect bounds = mu_layout_next(muctx);
+                                mu_Rect histRect = mu_rect(bounds.x, bounds.y, 10, 0);
+                                foreach (sum; result.sums[0..result.elfCount]) {
+                                    histRect.h = scale(sum, 0, result.maxSums[0], 0, bounds.h);
+                                    mu_Rect flippedHistRect = histRect;
+                                    flippedHistRect.y += (bounds.h - histRect.h);
+                                    mu_draw_rect(muctx, flippedHistRect, mu_color(100, 100, 100, 255));
+                                    histRect.x += histRect.w + 5;
+                                }
                             }
+                            mu_end_panel(muctx);
                         } break;
 
                         case SolutionID.Year2022Day2: break;
