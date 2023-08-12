@@ -116,32 +116,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         muctx.text_height = &textHeightProc;
     }
 
-    enum SolutionID {
-        Year2022Day1,
-        Year2022Day2,
-        Year2022Day3,
-    }
-    string[SolutionID.max + 1] SolutionIDStrings;
-    static foreach (ind; SolutionID.min..SolutionID.max + 1) {SolutionIDStrings[ind] = __traits(allMembers, SolutionID)[ind];}
-    struct State {
-        SolutionID activeSolution = SolutionID.Year2022Day1;
-    }
-    State state;
-
-    Year2022Day1Result resultYear2020day1 = year2022day1(globalInputYear2022day1, arena, scratch);
-    assert(resultYear2020day1.maxSums[0] == 68802);
-    assert(resultYear2020day1.top3sum == 205370);
-
-    // TODO(khvorov) Temp output
-    {
-        long[2] result = year2022day2(globalInputYear2022day2);
-        OutputDebugStringA(StringBuilder(arena).fmt(result).fmt("\n").endNull().ptr);
-    }
-
-    {
-        long[2] result = year2022day3(globalInputYear2022day3);
-        OutputDebugStringA(StringBuilder(arena).fmt(result).fmt("\n").endNull().ptr);
-    }
+    State state = State(arena, scratch);
 
     mainloop: for (;;) {
         assert(scratch.used_ == 0);
@@ -178,15 +153,15 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         case WM_KEYDOWN: {
             switch (message.wParam) {
             case VK_UP: {
-                if (state.activeSolution == SolutionID.init) {
-                    state.activeSolution = SolutionID.max;
+                if (state.activeSolution == 0) {
+                    state.activeSolution = Solution.Types.length - 1;
                 } else {
                     state.activeSolution -= 1;
                 }
             } break;
             case VK_DOWN: {
-                if (state.activeSolution == SolutionID.max) {
-                    state.activeSolution = SolutionID.init;
+                if (state.activeSolution == Solution.Types.length - 1) {
+                    state.activeSolution = 0;
                 } else {
                     state.activeSolution += 1;
                 }
@@ -202,90 +177,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         }
 
         // TODO(khvorov) It takes microui 1 frame to catch up to last input.
-        {
-            void layout_row(int count)(int[count] widths, int height) {
-                mu_layout_row(muctx, cast(int)widths.length, widths.ptr, height);
-            }
-
-            int scale(int val, int ogMin, int ogMax, int newMin, int newMax) {
-                int ogRange = ogMax - ogMin;
-                float val01 = cast(float)(val - ogMin) / cast(float)ogRange;
-                int newRange = newMax - newMin;
-                float newvalFloat = val01 * cast(float)newRange + cast(float)newMin;
-                int newvalInt = cast(int)newvalFloat;
-                return newvalInt; 
-            }
-
-            mu_begin(muctx);
-            if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, d3d11Renderer.window.width, d3d11Renderer.window.height), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
-                layout_row([200, -1], -1);
-
-                mu_begin_panel_ex(muctx, "SolutionSelector", 0);
-                {
-                    layout_row([-1], 20);
-
-                    static foreach (ind; SolutionID.min..SolutionID.max + 1) {{
-                        mu_Color[3] oldColors = muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1];
-                        if (state.activeSolution == mixin("SolutionID." ~ __traits(allMembers, SolutionID)[ind])) {
-                            for (int ind = MU_COLOR_BUTTON; ind <= MU_COLOR_BUTTONFOCUS; ind++) {
-                                muctx.style.colors[ind].r += 25;
-                            }
-                        }
-                        if (mu_button_ex(muctx, __traits(allMembers, SolutionID)[ind], 0, MU_OPT_ALIGNCENTER)) {
-                            state.activeSolution = mixin("SolutionID." ~ __traits(allMembers, SolutionID)[ind]);
-                        }
-                        muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1] = oldColors;
-                    }}
-                }
-                mu_end_panel(muctx);
-
-                mu_begin_panel_ex(muctx, "Solution", 0);
-                {
-                    // TODO(khvorov) Fill
-                    final switch(state.activeSolution) {
-                        case SolutionID.Year2022Day1: {
-                            Year2022Day1Result result = resultYear2020day1;
-
-                            layout_row([-1], cast(int)d3d11Renderer.font.chHeight * 2);
-                            mu_begin_panel_ex(muctx, "SolutionResultString", MU_OPT_NOFRAME);
-                            {
-                                layout_row([-1], cast(int)d3d11Renderer.font.chHeight);
-                                string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(result.maxSums[0]).fmt(" Part 2: ").fmt(result.top3sum).endNull();
-                                mu_text(muctx, resultStr.ptr);
-                            }
-                            mu_end_panel(muctx);
-
-                            layout_row([-1], -1);
-                            mu_begin_panel_ex(muctx, "SolutionResultGraph", MU_OPT_NOFRAME);
-                            {
-                                int rectWidth = 10;
-                                int rectPad = 5;
-                                int totalWidth = rectWidth * result.elfCount + rectPad * (result.elfCount - 1);
-                                layout_row([totalWidth], -1);
-                                mu_Rect bounds = mu_layout_next(muctx);
-                                mu_Rect histRect = mu_rect(bounds.x, bounds.y, 10, 0);
-                                foreach (sum; result.sums[0..result.elfCount]) {
-                                    histRect.h = scale(sum, 0, result.maxSums[0], 0, bounds.h);
-                                    mu_Rect flippedHistRect = histRect;
-                                    flippedHistRect.y += (bounds.h - histRect.h);
-                                    mu_draw_rect(muctx, flippedHistRect, mu_color(100, 100, 100, 255));
-                                    histRect.x += histRect.w + 5;
-                                }
-                            }
-                            mu_end_panel(muctx);
-                        } break;
-
-                        case SolutionID.Year2022Day2: break;
-                        case SolutionID.Year2022Day3: break;
-                    }
-                }
-                mu_end_panel(muctx);
-
-                mu_end_window(muctx);
-            }
-            mu_end(muctx);
-        }
-
+        state.draw(muctx, d3d11Renderer.window.width, d3d11Renderer.window.height, cast(int)d3d11Renderer.font.chHeight, scratch);
         for (mu_Command* cmd = null; mu_next_command(muctx, &cmd);) {
             switch (cmd.type) {
             case MU_COMMAND_TEXT: {
@@ -335,6 +227,5 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         d3d11Renderer.draw();
     }
 
-    d3d11Renderer.destroy();
     return 0;
 }

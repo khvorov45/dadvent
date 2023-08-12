@@ -2,204 +2,207 @@ module dadvent;
 
 import core.stdc.string : memcpy, memset;
 
-struct Year2022Day1Result {
+import microui;
+
+struct Year2022Day1 {
     int* calories;
     int* itemCounts;
     int* sums;
     int elfCount;
     int[3] maxSums;
     int top3sum;
-}
+        
+    this(string input, ref Arena arena, ref Arena scratch) {
+        TempMemory _TEMP_ = TempMemory(scratch);
 
-Year2022Day1Result year2022day1(string input, ref Arena arena, ref Arena scratch) {
-    TempMemory _TEMP_ = TempMemory(scratch);
+        LineRange lines = LineRange(input);
+        int thisSum = 0;
+        int thisItemCount = 0;
 
-    LineRange lines = LineRange(input);
-    int thisSum = 0;
-    int thisItemCount = 0;
-    int[3] maxSums;
-
-    DynArr!int caloriesScratch = DynArr!int(scratch, scratch.buf.length / 3);
-    DynArr!int itemCountsScratch = DynArr!int(scratch, scratch.buf.length / 3);
-    DynArr!int sumsScratch = DynArr!int(scratch, scratch.freesize);
-    for (;;) {
-        string thisLine = lines.line;
-        if (thisLine.length > 0) {
-            long number = parseInt(thisLine);
-            caloriesScratch.push(cast(int)number);
-            thisSum += number;
-            thisItemCount += 1;
-        }
-        lines.popFront();
-
-        if (thisLine.length == 0 || lines.empty) {
-            sumsScratch.push(thisSum);
-            itemCountsScratch.push(thisItemCount);
-            if (thisSum > maxSums[0]) {
-                maxSums[2] = maxSums[1];
-                maxSums[1] = maxSums[0];
-                maxSums[0] = thisSum;
-            } else if (thisSum > maxSums[1]) {
-                maxSums[2] = maxSums[1];
-                maxSums[1] = thisSum;
-            } else if (thisSum > maxSums[2]) {
-                maxSums[2] = thisSum;
+        DynArr!int caloriesScratch = DynArr!int(scratch, scratch.buf.length / 3);
+        DynArr!int itemCountsScratch = DynArr!int(scratch, scratch.buf.length / 3);
+        DynArr!int sumsScratch = DynArr!int(scratch, scratch.freesize);
+        for (;;) {
+            string thisLine = lines.line;
+            if (thisLine.length > 0) {
+                long number = parseInt(thisLine);
+                caloriesScratch.push(cast(int)number);
+                thisSum += number;
+                thisItemCount += 1;
             }
-            thisSum = 0;
-            thisItemCount = 0;
-            if (lines.empty) {
-                break;
-            }
-        }
-    }
+            lines.popFront();
 
-    int[] calories = caloriesScratch.copy(arena);
-    int[] itemCounts = itemCountsScratch.copy(arena);
-    int[] sums = sumsScratch.copy(arena);
-    assert(itemCounts.length == sums.length);
-
-    Year2022Day1Result result = {
-        calories: calories.ptr,
-        itemCounts: itemCounts.ptr,
-        sums: sums.ptr,
-        elfCount: cast(int)sums.length,
-        maxSums: maxSums,
-        top3sum: maxSums[0] + maxSums[1] + maxSums[2],
-    };
-    return result;
-}
-
-long[2] year2022day2(string input) {
-    LineRange lines = LineRange(input);
-    long scorePart1 = 0;
-    long scorePart2 = 0;
-    foreach (line; lines) {
-        assert(line.length == 3);
-
-        char c1 = line.ptr[0];
-        assert(c1 == 'A' || c1 == 'B' || c1 == 'C');
-
-        char c2 = line.ptr[2];
-        assert(c2 == 'X' || c2 == 'Y' || c2 == 'Z');
-
-        long choice1 = c1 - 'A';
-
-        long choice2Part1 = c2 - 'X';
-        long scoreOutcomePart1 = 0;
-        {
-            bool draw = choice1 == choice2Part1;
-            bool lose1 = ((choice1 + 1) % 3) == choice2Part1;
-            bool lose2 = ((choice2Part1 + 1) % 3) == choice1;
-            assert(draw || lose1 || lose2);
-
-            if (draw) {
-                assert(!lose1 && !lose2);
-                scoreOutcomePart1 = 3;
-            } else if (lose1) {
-                assert(!draw && !lose2);
-                scoreOutcomePart1 = 6;
-            }
-        }
-
-        long scoreOutcomePart2 = (c2 - 'X') * 3;
-        long choice2Part2 = 0;
-        switch (scoreOutcomePart2) {
-        case 0:
-            choice2Part2 = (choice1 + 2) % 3;
-            break;
-        case 3:
-            choice2Part2 = choice1;
-            break;
-        case 6:
-            choice2Part2 = (choice1 + 1) % 3;
-            break;
-        default:
-            assert(false, "unreachable");
-        }
-
-        scorePart1 += scoreOutcomePart1 + choice2Part1 + 1;
-        scorePart2 += scoreOutcomePart2 + choice2Part2 + 1;
-    }
-
-    long[2] result = [scorePart1, scorePart2];
-    return result;
-}
-
-long[2] year2022day3(string input) {
-    LineRange lines = LineRange(input);
-
-    const long maxPriority = 52;
-    bool[maxPriority + 1][3] groupLinePriorities;
-    long curGroupLineIndex = 0;
-
-    long sharedItemsPrioritySum = 0;
-    long badgePrioritySum = 0;
-    foreach (line; lines) {
-        assert(line.length % 2 == 0);
-        long perCompartment = line.length / 2;
-        string comp1 = line[0 .. perCompartment];
-        string comp2 = line[perCompartment .. line.length];
-
-        bool[maxPriority + 1] comp1Priorities;
-        bool[maxPriority + 1] comp2Priorities;
-        for (long ind = 0; ind < perCompartment; ind++) {
-            char comp1Item = comp1[ind];
-            char comp2Item = comp2[ind];
-
-            long getpriority(char ch) {
-                assert((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'));
-                long result = ch >= 'a' ? ch - 'a' + 1 : ch - 'A' + 27;
-                return result;
-            }
-
-            long comp1ItemPriority = getpriority(comp1Item);
-            long comp2ItemPriority = getpriority(comp2Item);
-
-            comp1Priorities[comp1ItemPriority] = true;
-            comp2Priorities[comp2ItemPriority] = true;
-
-            groupLinePriorities[curGroupLineIndex][comp1ItemPriority] = true;
-            groupLinePriorities[curGroupLineIndex][comp2ItemPriority] = true;
-        }
-
-        bool foundShared = false;
-        for (long priority = 1; priority <= maxPriority; priority++) {
-            bool incomp1 = comp1Priorities[priority];
-            bool incomp2 = comp2Priorities[priority];
-            if (incomp1 && incomp2) {
-                assert(!foundShared);
-                foundShared = true;
-                sharedItemsPrioritySum += priority;
-            }
-        }
-        assert(foundShared);
-
-        if (curGroupLineIndex == 2) {
-            bool foundBadge = false;
-            for (long priority = 1; priority <= maxPriority; priority++) {
-                bool g0 = groupLinePriorities[0][priority];
-                bool g1 = groupLinePriorities[1][priority];
-                bool g2 = groupLinePriorities[2][priority];
-                if (g0 && g1 && g2) {
-                    assert(!foundBadge);
-                    foundBadge = true;
-                    badgePrioritySum += priority;
+            if (thisLine.length == 0 || lines.empty) {
+                sumsScratch.push(thisSum);
+                itemCountsScratch.push(thisItemCount);
+                if (thisSum > maxSums[0]) {
+                    maxSums[2] = maxSums[1];
+                    maxSums[1] = maxSums[0];
+                    maxSums[0] = thisSum;
+                } else if (thisSum > maxSums[1]) {
+                    maxSums[2] = maxSums[1];
+                    maxSums[1] = thisSum;
+                } else if (thisSum > maxSums[2]) {
+                    maxSums[2] = thisSum;
+                }
+                thisSum = 0;
+                thisItemCount = 0;
+                if (lines.empty) {
+                    break;
                 }
             }
-            assert(foundBadge);
-
-            curGroupLineIndex = 0;
-            for (long i = 0; i < groupLinePriorities.length; i++) {
-                bool[] arr = groupLinePriorities[i];
-                memset(arr.ptr, 0, arr.length * arr[0].sizeof);
-            }
-        } else {
-            curGroupLineIndex += 1;
         }
-    }
 
-    long[2] result = [sharedItemsPrioritySum, badgePrioritySum];
-    return result;
+        int[] caloriesSlice = caloriesScratch.copy(arena);
+        int[] itemCountsSlice = itemCountsScratch.copy(arena);
+        int[] sumsSlice = sumsScratch.copy(arena);
+        assert(itemCountsSlice.length == sumsSlice.length);
+
+        calories = caloriesSlice.ptr;
+        itemCounts = itemCountsSlice.ptr;
+        sums = sumsSlice.ptr;
+        elfCount = cast(int)sumsSlice.length;
+        top3sum = maxSums[0] + maxSums[1] + maxSums[2];
+    }
+}
+
+struct Year2022Day2 {
+    long[2] result;
+
+    this(string input, ref Arena arena, ref Arena scratch) {
+        LineRange lines = LineRange(input);
+        long scorePart1 = 0;
+        long scorePart2 = 0;
+        foreach (line; lines) {
+            assert(line.length == 3);
+
+            char c1 = line.ptr[0];
+            assert(c1 == 'A' || c1 == 'B' || c1 == 'C');
+
+            char c2 = line.ptr[2];
+            assert(c2 == 'X' || c2 == 'Y' || c2 == 'Z');
+
+            long choice1 = c1 - 'A';
+
+            long choice2Part1 = c2 - 'X';
+            long scoreOutcomePart1 = 0;
+            {
+                bool draw = choice1 == choice2Part1;
+                bool lose1 = ((choice1 + 1) % 3) == choice2Part1;
+                bool lose2 = ((choice2Part1 + 1) % 3) == choice1;
+                assert(draw || lose1 || lose2);
+
+                if (draw) {
+                    assert(!lose1 && !lose2);
+                    scoreOutcomePart1 = 3;
+                } else if (lose1) {
+                    assert(!draw && !lose2);
+                    scoreOutcomePart1 = 6;
+                }
+            }
+
+            long scoreOutcomePart2 = (c2 - 'X') * 3;
+            long choice2Part2 = 0;
+            switch (scoreOutcomePart2) {
+            case 0:
+                choice2Part2 = (choice1 + 2) % 3;
+                break;
+            case 3:
+                choice2Part2 = choice1;
+                break;
+            case 6:
+                choice2Part2 = (choice1 + 1) % 3;
+                break;
+            default:
+                assert(false, "unreachable");
+            }
+
+            scorePart1 += scoreOutcomePart1 + choice2Part1 + 1;
+            scorePart2 += scoreOutcomePart2 + choice2Part2 + 1;
+        }
+
+        result = [scorePart1, scorePart2];
+    }
+}
+
+struct Year2022Day3 {
+    long[2] result;
+
+    this(string input, ref Arena arena, ref Arena scratch) {
+        LineRange lines = LineRange(input);
+
+        const long maxPriority = 52;
+        bool[maxPriority + 1][3] groupLinePriorities;
+        long curGroupLineIndex = 0;
+
+        long sharedItemsPrioritySum = 0;
+        long badgePrioritySum = 0;
+        foreach (line; lines) {
+            assert(line.length % 2 == 0);
+            long perCompartment = line.length / 2;
+            string comp1 = line[0 .. perCompartment];
+            string comp2 = line[perCompartment .. line.length];
+
+            bool[maxPriority + 1] comp1Priorities;
+            bool[maxPriority + 1] comp2Priorities;
+            for (long ind = 0; ind < perCompartment; ind++) {
+                char comp1Item = comp1[ind];
+                char comp2Item = comp2[ind];
+
+                long getpriority(char ch) {
+                    assert((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'));
+                    long priority = ch >= 'a' ? ch - 'a' + 1 : ch - 'A' + 27;
+                    return priority;
+                }
+
+                long comp1ItemPriority = getpriority(comp1Item);
+                long comp2ItemPriority = getpriority(comp2Item);
+
+                comp1Priorities[comp1ItemPriority] = true;
+                comp2Priorities[comp2ItemPriority] = true;
+
+                groupLinePriorities[curGroupLineIndex][comp1ItemPriority] = true;
+                groupLinePriorities[curGroupLineIndex][comp2ItemPriority] = true;
+            }
+
+            bool foundShared = false;
+            for (long priority = 1; priority <= maxPriority; priority++) {
+                bool incomp1 = comp1Priorities[priority];
+                bool incomp2 = comp2Priorities[priority];
+                if (incomp1 && incomp2) {
+                    assert(!foundShared);
+                    foundShared = true;
+                    sharedItemsPrioritySum += priority;
+                }
+            }
+            assert(foundShared);
+
+            if (curGroupLineIndex == 2) {
+                bool foundBadge = false;
+                for (long priority = 1; priority <= maxPriority; priority++) {
+                    bool g0 = groupLinePriorities[0][priority];
+                    bool g1 = groupLinePriorities[1][priority];
+                    bool g2 = groupLinePriorities[2][priority];
+                    if (g0 && g1 && g2) {
+                        assert(!foundBadge);
+                        foundBadge = true;
+                        badgePrioritySum += priority;
+                    }
+                }
+                assert(foundBadge);
+
+                curGroupLineIndex = 0;
+                for (long i = 0; i < groupLinePriorities.length; i++) {
+                    bool[] arr = groupLinePriorities[i];
+                    memset(arr.ptr, 0, arr.length * arr[0].sizeof);
+                }
+            } else {
+                curGroupLineIndex += 1;
+            }
+        }
+
+        result = [sharedItemsPrioritySum, badgePrioritySum];
+    }
 }
 
 T max(T)(T v1, T v2) => v1 > v2 ? v1 : v2;
@@ -434,6 +437,111 @@ bool strstarts(string str, string prefix) {
     return result;
 }
 
+import std.SumType;
+alias Solution = SumType!(Year2022Day1, Year2022Day2, Year2022Day3);
+
+struct State {
+    Solution[Solution.Types.length] solutions;
+    int activeSolution;
+
+    this(ref Arena arena, ref Arena scratch) {
+        {
+            import input;
+            static foreach (typeIndex, type; Solution.Types) {{
+                const string typeName = Solution.Types[typeIndex].stringof;
+                mixin(typeName, " thisSolution = ", typeName, "(globalInput", typeName,  ", arena, scratch);");
+                static if (typeName == "Year2022Day1") {
+                    assert(thisSolution.maxSums[0] == 68802);
+                    assert(thisSolution.top3sum == 205370);
+                }
+                mixin("solutions[", typeIndex, "] = thisSolution;");
+            }}
+        }
+    }
+
+    void draw(mu_Context* muctx, int windowWidth, int windowHeight, int fontHeight, ref Arena scratch) {
+        TempMemory _TEMP_ = TempMemory(scratch);
+
+        void layout_row(int count)(mu_Context* muctx, int[count] widths, int height) {
+            mu_layout_row(muctx, cast(int)widths.length, widths.ptr, height);
+        }
+
+        int scale(int val, int ogMin, int ogMax, int newMin, int newMax) {
+            int ogRange = ogMax - ogMin;
+            float val01 = cast(float)(val - ogMin) / cast(float)ogRange;
+            int newRange = newMax - newMin;
+            float newvalFloat = val01 * cast(float)newRange + cast(float)newMin;
+            int newvalInt = cast(int)newvalFloat;
+            return newvalInt;
+        }
+
+        mu_begin(muctx);
+        if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, windowWidth, windowHeight), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
+            layout_row(muctx, [200, -1], -1);
+
+            mu_begin_panel_ex(muctx, "SolutionSelector", 0);
+            {
+                layout_row(muctx, [-1], 20);
+
+                static foreach (typeIndex, type; Solution.Types) {{
+                    mu_Color[3] oldColors = muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1];
+                    if (activeSolution == typeIndex) {
+                        for (int ind = MU_COLOR_BUTTON; ind <= MU_COLOR_BUTTONFOCUS; ind++) {
+                            muctx.style.colors[ind].r += 25;
+                        }
+                    }
+                    if (mu_button_ex(muctx, Solution.Types[typeIndex].stringof, 0, MU_OPT_ALIGNCENTER)) {
+                        activeSolution = typeIndex;
+                    }
+                    muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1] = oldColors;
+                }}
+            }
+            mu_end_panel(muctx);
+
+            mu_begin_panel_ex(muctx, "Solution", 0);
+            // TODO(khvorov) Fill
+            solutions[activeSolution].match!(
+                (ref Year2022Day1 sol) {
+                    layout_row(muctx, [-1], cast(int)fontHeight * 2);
+                    mu_begin_panel_ex(muctx, "SolutionResultString", MU_OPT_NOFRAME);
+                    {
+                        layout_row(muctx, [-1], cast(int)fontHeight);
+                        string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(sol.maxSums[0]).fmt(" Part 2: ").fmt(sol.top3sum).endNull();
+                        mu_text(muctx, resultStr.ptr);
+                    }
+                    mu_end_panel(muctx);
+
+                    layout_row(muctx, [-1], -1);
+                    mu_begin_panel_ex(muctx, "SolutionResultGraph", MU_OPT_NOFRAME);
+                    {
+                        int rectWidth = 10;
+                        int rectPad = 5;
+                        int totalWidth = rectWidth * sol.elfCount + rectPad * (sol.elfCount - 1);
+                        layout_row(muctx, [totalWidth], -1);
+                        mu_Rect bounds = mu_layout_next(muctx);
+                        mu_Rect histRect = mu_rect(bounds.x, bounds.y, 10, 0);
+                        foreach (sum; sol.sums[0..sol.elfCount]) {
+                            histRect.h = scale(sum, 0, sol.maxSums[0], 0, bounds.h);
+                            mu_Rect flippedHistRect = histRect;
+                            flippedHistRect.y += (bounds.h - histRect.h);
+                            mu_draw_rect(muctx, flippedHistRect, mu_color(100, 100, 100, 255));
+                            histRect.x += histRect.w + 5;
+                        }
+                    }
+                    mu_end_panel(muctx);
+                },
+
+                (ref Year2022Day2 sol) {},
+                (ref Year2022Day3 sol) {}
+            );
+            mu_end_panel(muctx);
+
+            mu_end_window(muctx);
+        }
+        mu_end(muctx);
+    }
+}
+
 void runTests() {
     {
         assert(isPowerOf2(1));
@@ -590,7 +698,7 @@ void runTests() {
         foreach(inputIndex, input; testInput) {
             arena.used = 0;
             scratch.used = 0;
-            Year2022Day1Result result = year2022day1(input, arena, scratch);
+            Year2022Day1 result = Year2022Day1(input, arena, scratch);
             assert(result.maxSums[0] == topMaxSum[inputIndex]);
             assert(result.top3sum == top3sum[inputIndex]);
             assert(result.elfCount == elvesCount[inputIndex]);

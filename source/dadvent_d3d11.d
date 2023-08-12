@@ -434,7 +434,7 @@ struct D3D11Renderer {
         }
     }
 
-    void destroy() {
+    ~this() {
         device.lpVtbl.Release(device);
         context.lpVtbl.Release(context);
         swapchain.lpVtbl.Release(swapchain);

@@ -1,6 +1,6 @@
 module input;
 
-const string globalInputYear2022day1 =
+const string globalInputYear2022Day1 =
     "4887
 9307
 8895
@@ -2251,7 +2251,7 @@ const string globalInputYear2022day1 =
 15319
 6704";
 
-const string globalInputYear2022day2 =
+const string globalInputYear2022Day2 =
     "B Z
 A Y
 A Y
@@ -4753,7 +4753,7 @@ A Y
 C Z
 B X";
 
-const string globalInputYear2022day3 =
+const string globalInputYear2022Day3 =
     "hqBqJsqHhHvhHHqlBvlfpHQQwLVzVwtVzjzttjQVSjMjwL
 gRTRnCRsFNGbTzLjwcSTMmSz
 dGgsRWPGdWgZJqBBqhfpPq
