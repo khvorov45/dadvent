@@ -11,7 +11,7 @@ struct Year2022Day1 {
     int elfCount;
     int[3] maxSums;
     int top3sum;
-        
+
     this(string input, ref Arena arena, ref Arena scratch) {
         TempMemory _TEMP_ = TempMemory(scratch);
 
@@ -462,7 +462,7 @@ struct State {
     void draw(mu_Context* muctx, int windowWidth, int windowHeight, int fontHeight, ref Arena scratch) {
         TempMemory _TEMP_ = TempMemory(scratch);
 
-        void layout_row(int count)(mu_Context* muctx, int[count] widths, int height) {
+        void layout_row(int count)(int[count] widths, int height) {
             mu_layout_row(muctx, cast(int)widths.length, widths.ptr, height);
         }
 
@@ -477,11 +477,11 @@ struct State {
 
         mu_begin(muctx);
         if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, windowWidth, windowHeight), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
-            layout_row(muctx, [200, -1], -1);
+            layout_row([200, -1], -1);
 
             mu_begin_panel_ex(muctx, "SolutionSelector", 0);
             {
-                layout_row(muctx, [-1], 20);
+                layout_row([-1], 20);
 
                 static foreach (typeIndex, type; Solution.Types) {{
                     mu_Color[3] oldColors = muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1];
@@ -502,33 +502,66 @@ struct State {
             // TODO(khvorov) Fill
             solutions[activeSolution].match!(
                 (ref Year2022Day1 sol) {
-                    layout_row(muctx, [-1], cast(int)fontHeight * 2);
+                    layout_row([-1], cast(int)fontHeight * 2);
                     mu_begin_panel_ex(muctx, "SolutionResultString", MU_OPT_NOFRAME);
                     {
-                        layout_row(muctx, [-1], cast(int)fontHeight);
+                        layout_row([-1], cast(int)fontHeight);
                         string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(sol.maxSums[0]).fmt(" Part 2: ").fmt(sol.top3sum).endNull();
                         mu_text(muctx, resultStr.ptr);
                     }
                     mu_end_panel(muctx);
 
-                    layout_row(muctx, [-1], -1);
-                    mu_begin_panel_ex(muctx, "SolutionResultGraph", MU_OPT_NOFRAME);
+                    layout_row([100, -1], -1);
+                    mu_begin_panel_ex(muctx, "HistogramScale", MU_OPT_NOFRAME);
+                    layout_row([-1], -1);
+                    mu_Rect scaleBounds = mu_layout_next(muctx);
+                    mu_end_panel(muctx);
+
                     {
+                        mu_Color histColor = mu_color(100, 100, 100, 255);
+                        mu_Color gridColor = mu_color(25, 25, 25, 255);
+                        mu_Color axisColor = mu_color(25, 25, 25, 255);
+
+                        mu_begin_panel_ex(muctx, "HistogramRects", MU_OPT_NOFRAME);
                         int rectWidth = 10;
                         int rectPad = 5;
                         int totalWidth = rectWidth * sol.elfCount + rectPad * (sol.elfCount - 1);
-                        layout_row(muctx, [totalWidth], -1);
-                        mu_Rect bounds = mu_layout_next(muctx);
-                        mu_Rect histRect = mu_rect(bounds.x, bounds.y, 10, 0);
+                        layout_row([totalWidth], -1);
+                        const mu_Rect rectBounds = mu_layout_next(muctx);
+                        scaleBounds.h = rectBounds.h;
+                        int scaleToPx(int val) => scale(val, 0, sol.maxSums[0], rectBounds.y + rectBounds.h, rectBounds.y);
+
+                        mu_Rect scaleAndRectsBounds = mu_Rect(scaleBounds.x, scaleBounds.y, rectBounds.x + rectBounds.w - scaleBounds.x, scaleBounds.h);
+                        mu_Rect rectClipRect = mu_get_clip_rect(muctx);
+                        mu_pop_clip_rect(muctx);
+                        mu_push_clip_rect(muctx, scaleAndRectsBounds);
+                        {
+                            mu_Rect vlineRect = scaleBounds;
+                            vlineRect.w = 2;
+                            vlineRect.x += scaleBounds.w - vlineRect.w;
+                            mu_draw_rect(muctx, vlineRect, axisColor);
+                            for (int tickValue = 0; tickValue < 100000; tickValue += 10000) {
+                                int tickPx = scaleToPx(tickValue);
+                                mu_Rect tickRect = vlineRect;
+                                tickRect.x -= 5;
+                                tickRect.h = 2;
+                                tickRect.w = rectBounds.w;
+                                tickRect.y = tickPx;
+                                mu_draw_rect(muctx, tickRect, gridColor);
+                            }
+                        }
+                        mu_pop_clip_rect(muctx);
+                        mu_push_clip_rect(muctx, rectClipRect);
+
+                        mu_Rect histRect = mu_rect(rectBounds.x, rectBounds.y, 10, 0);
                         foreach (sum; sol.sums[0..sol.elfCount]) {
-                            histRect.h = scale(sum, 0, sol.maxSums[0], 0, bounds.h);
-                            mu_Rect flippedHistRect = histRect;
-                            flippedHistRect.y += (bounds.h - histRect.h);
-                            mu_draw_rect(muctx, flippedHistRect, mu_color(100, 100, 100, 255));
+                            histRect.y = scaleToPx(sum);
+                            histRect.h = (rectBounds.y + rectBounds.h) - histRect.y;
+                            mu_draw_rect(muctx, histRect, histColor);
                             histRect.x += histRect.w + 5;
                         }
+                        mu_end_panel(muctx);
                     }
-                    mu_end_panel(muctx);
                 },
 
                 (ref Year2022Day2 sol) {},
