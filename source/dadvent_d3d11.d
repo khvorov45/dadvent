@@ -276,7 +276,7 @@ struct D3D11Renderer {
 
         // NOTE(khvorov) Rect buffer
         {
-            rects.capacity = 1024;
+            rects.capacity = 1024 * 1024;
             D3D11_BUFFER_DESC desc = {
                 ByteWidth: cast(uint)(VSInput.sizeof * rects.capacity),
                 Usage: D3D11_USAGE_DYNAMIC,

@@ -5,11 +5,14 @@ import core.stdc.string : memcpy, memset;
 import microui;
 
 struct Year2022Day1 {
-    int* calories;
-    int* itemCounts;
-    int* sums;
-    int elfCount;
-    int[3] maxSums;
+    int[] caloriesStorage;
+    struct Elf {
+        int[] calories;
+        int sum;
+
+        int opCmp(Elf rhs) const => rhs.sum - sum;
+    }
+    Elf[] elves;
     int top3sum;
 
     this(string input, ref Arena arena, ref Arena scratch) {
@@ -17,52 +20,46 @@ struct Year2022Day1 {
 
         LineRange lines = LineRange(input);
         int thisSum = 0;
-        int thisItemCount = 0;
+        int itemIndexStart = 0;
+        int curItemIndex = 0;
 
-        DynArr!int caloriesScratch = DynArr!int(scratch, scratch.buf.length / 3);
-        DynArr!int itemCountsScratch = DynArr!int(scratch, scratch.buf.length / 3);
-        DynArr!int sumsScratch = DynArr!int(scratch, scratch.freesize);
+        long arenaUsedBefore = arena.used;
+        DynArr!int caloriesStorageDyn = DynArr!int(arena, arena.freesize);
+        DynArr!Elf elvesScratch = DynArr!Elf(scratch, scratch.freesize);
         for (;;) {
             string thisLine = lines.line;
             if (thisLine.length > 0) {
                 long number = parseInt(thisLine);
-                caloriesScratch.push(cast(int)number);
+                caloriesStorageDyn.push(cast(int)number);
                 thisSum += number;
-                thisItemCount += 1;
+                curItemIndex += 1;
             }
             lines.popFront();
 
             if (thisLine.length == 0 || lines.empty) {
-                sumsScratch.push(thisSum);
-                itemCountsScratch.push(thisItemCount);
-                if (thisSum > maxSums[0]) {
-                    maxSums[2] = maxSums[1];
-                    maxSums[1] = maxSums[0];
-                    maxSums[0] = thisSum;
-                } else if (thisSum > maxSums[1]) {
-                    maxSums[2] = maxSums[1];
-                    maxSums[1] = thisSum;
-                } else if (thisSum > maxSums[2]) {
-                    maxSums[2] = thisSum;
-                }
+                Elf elf = {caloriesStorageDyn.buf[itemIndexStart..curItemIndex], thisSum};
+                elvesScratch.push(elf);
                 thisSum = 0;
-                thisItemCount = 0;
+                itemIndexStart = curItemIndex;
                 if (lines.empty) {
                     break;
                 }
             }
         }
 
-        int[] caloriesSlice = caloriesScratch.copy(arena);
-        int[] itemCountsSlice = itemCountsScratch.copy(arena);
-        int[] sumsSlice = sumsScratch.copy(arena);
-        assert(itemCountsSlice.length == sumsSlice.length);
+        long caloriesSizeUsed = caloriesStorageDyn.len * int.sizeof;
+        arena.used = arenaUsedBefore + caloriesSizeUsed;
 
-        calories = caloriesSlice.ptr;
-        itemCounts = itemCountsSlice.ptr;
-        sums = sumsSlice.ptr;
-        elfCount = cast(int)sumsSlice.length;
-        top3sum = maxSums[0] + maxSums[1] + maxSums[2];
+        caloriesStorage = caloriesStorageDyn.buf[0..caloriesStorageDyn.len];
+        elves = elvesScratch.copy(arena);
+
+        import std.algorithm.sorting;
+        elves.sort();
+        foreach(elf; elves) {
+            elf.calories.sort!("a > b");
+        }
+
+        top3sum = elves[0].sum + elves[1].sum + elves[2].sum;
     }
 }
 
@@ -451,7 +448,7 @@ struct State {
                 const string typeName = Solution.Types[typeIndex].stringof;
                 mixin(typeName, " thisSolution = ", typeName, "(globalInput", typeName,  ", arena, scratch);");
                 static if (typeName == "Year2022Day1") {
-                    assert(thisSolution.maxSums[0] == 68802);
+                    assert(thisSolution.elves[0].sum == 68802);
                     assert(thisSolution.top3sum == 205370);
                 }
                 mixin("solutions[", typeIndex, "] = thisSolution;");
@@ -459,11 +456,31 @@ struct State {
         }
     }
 
-    void draw(mu_Context* muctx, int windowWidth, int windowHeight, int fontHeight, ref Arena scratch) {
+    void draw(mu_Context* muctx, int windowWidth, int windowHeight, ref Arena scratch) {
         TempMemory _TEMP_ = TempMemory(scratch);
+        int fontHeight = muctx.text_height(muctx.style.font);
+        int fontChWidth = muctx.text_width(muctx.style.font, "0", 1);
 
         void layout_row(int count)(int[count] widths, int height) {
             mu_layout_row(muctx, cast(int)widths.length, widths.ptr, height);
+        }
+
+        void drawRectWithBorder(mu_Rect rect, mu_Color fill, mu_Color border) {
+            int borderThickness = 1;
+            mu_Rect top = rect;
+            top.h = borderThickness;
+            mu_Rect bottom = top;
+            bottom.y += rect.h - borderThickness;
+            mu_Rect left = rect;
+            left.w = borderThickness;
+            mu_Rect right = left;
+            right.x += rect.w - borderThickness;
+
+            mu_draw_rect(muctx, rect, fill);
+            mu_draw_rect(muctx, top, border);
+            mu_draw_rect(muctx, bottom, border);
+            mu_draw_rect(muctx, left, border);
+            mu_draw_rect(muctx, right, border);
         }
 
         int scale(int val, int ogMin, int ogMax, int newMin, int newMax) {
@@ -479,7 +496,7 @@ struct State {
         if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, windowWidth, windowHeight), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
             layout_row([200, -1], -1);
 
-            mu_begin_panel_ex(muctx, "SolutionSelector", 0);
+            mu_begin_panel_ex(muctx, "SolutionSelector", MU_OPT_NOFRAME);
             {
                 layout_row([-1], 20);
 
@@ -498,7 +515,7 @@ struct State {
             }
             mu_end_panel(muctx);
 
-            mu_begin_panel_ex(muctx, "Solution", 0);
+            mu_begin_panel_ex(muctx, "Solution", MU_OPT_NOFRAME);
             // TODO(khvorov) Fill
             solutions[activeSolution].match!(
                 (ref Year2022Day1 sol) {
@@ -506,7 +523,7 @@ struct State {
                     mu_begin_panel_ex(muctx, "SolutionResultString", MU_OPT_NOFRAME);
                     {
                         layout_row([-1], cast(int)fontHeight);
-                        string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(sol.maxSums[0]).fmt(" Part 2: ").fmt(sol.top3sum).endNull();
+                        string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(sol.elves[0].sum).fmt(" Part 2: ").fmt(sol.top3sum).endNull();
                         mu_text(muctx, resultStr.ptr);
                     }
                     mu_end_panel(muctx);
@@ -518,18 +535,27 @@ struct State {
                     mu_end_panel(muctx);
 
                     {
-                        mu_Color histColor = mu_color(100, 100, 100, 255);
-                        mu_Color gridColor = mu_color(25, 25, 25, 255);
-                        mu_Color axisColor = mu_color(25, 25, 25, 255);
+                        // From http://tsitsul.in/pdf/colors/dark_6.pdf
+                        mu_Color[6] histColors = [
+                            mu_color(0, 89, 0, 255),
+                            mu_color(0, 0, 120, 255),
+                            mu_color(73, 13, 0, 255),
+                            mu_color(138, 3, 79, 255),
+                            mu_color(0, 90, 138, 255),
+                            mu_color(68, 53 ,0, 255),
+                        ];
+                        mu_Color histBorderColor = mu_color(88, 88, 88, 255);
+                        mu_Color gridColor = mu_color(50, 50, 50, 255);
+                        mu_Color axisColor = mu_color(150, 150, 150, 255);
+
+                        int histRectWidth = 10;
 
                         mu_begin_panel_ex(muctx, "HistogramRects", MU_OPT_NOFRAME);
-                        int rectWidth = 10;
-                        int rectPad = 5;
-                        int totalWidth = rectWidth * sol.elfCount + rectPad * (sol.elfCount - 1);
+                        int totalWidth = histRectWidth * cast(int)sol.elves.length;
                         layout_row([totalWidth], -1);
                         const mu_Rect rectBounds = mu_layout_next(muctx);
                         scaleBounds.h = rectBounds.h;
-                        int scaleToPx(int val) => scale(val, 0, sol.maxSums[0], rectBounds.y + rectBounds.h, rectBounds.y);
+                        int scaleToPx(int val) => scale(val, 0, sol.elves[0].sum, rectBounds.y + rectBounds.h, rectBounds.y);
 
                         mu_Rect scaleAndRectsBounds = mu_Rect(scaleBounds.x, scaleBounds.y, rectBounds.x + rectBounds.w - scaleBounds.x, scaleBounds.h);
                         mu_Rect rectClipRect = mu_get_clip_rect(muctx);
@@ -540,7 +566,7 @@ struct State {
                             vlineRect.w = 2;
                             vlineRect.x += scaleBounds.w - vlineRect.w;
                             mu_draw_rect(muctx, vlineRect, axisColor);
-                            for (int tickValue = 0; tickValue < 100000; tickValue += 10000) {
+                            for (int tickValue = 10000; tickValue < 100000; tickValue += 10000) {
                                 int tickPx = scaleToPx(tickValue);
                                 mu_Rect tickRect = vlineRect;
                                 tickRect.x -= 5;
@@ -548,17 +574,34 @@ struct State {
                                 tickRect.w = rectBounds.w;
                                 tickRect.y = tickPx;
                                 mu_draw_rect(muctx, tickRect, gridColor);
+
+                                {
+                                    string tickValueStr = StringBuilder(scratch).fmt(tickValue).end();
+                                    mu_Vec2 pos = mu_vec2(tickRect.x - 5 * fontChWidth, tickRect.y + (tickRect.h / 2) - fontHeight / 2);
+                                    mu_draw_text(muctx, muctx.style.font, tickValueStr.ptr, cast(int)tickValueStr.length, pos, axisColor);
+                                }
                             }
                         }
                         mu_pop_clip_rect(muctx);
                         mu_push_clip_rect(muctx, rectClipRect);
 
-                        mu_Rect histRect = mu_rect(rectBounds.x, rectBounds.y, 10, 0);
-                        foreach (sum; sol.sums[0..sol.elfCount]) {
-                            histRect.y = scaleToPx(sum);
+                        mu_Rect histRect = mu_rect(rectBounds.x, rectBounds.y, histRectWidth, 0);
+                        foreach (elf; sol.elves) {
+                            histRect.y = scaleToPx(elf.sum);
                             histRect.h = (rectBounds.y + rectBounds.h) - histRect.y;
-                            mu_draw_rect(muctx, histRect, histColor);
-                            histRect.x += histRect.w + 5;
+
+                            mu_Rect calorieRect = histRect;
+                            calorieRect.y += calorieRect.h;
+                            calorieRect.h = 0;
+                            int calorieRectColorIndex = 0;
+                            foreach(count; elf.calories) {
+                                int yFromBase = scaleToPx(count);
+                                calorieRect.h = (rectBounds.y + rectBounds.h) - yFromBase;
+                                calorieRect.y -= calorieRect.h;
+                                drawRectWithBorder(calorieRect, histColors[calorieRectColorIndex], histBorderColor);
+                                calorieRectColorIndex = (calorieRectColorIndex + 1) % histColors.length;
+                            }
+                            histRect.x += histRect.w;
                         }
                         mu_end_panel(muctx);
                     }
@@ -722,19 +765,27 @@ void runTests() {
 
 "24000
 10000
+11000
+
+24000
+10000
+11000
+
+24000
+10000
 11000"
         ];
 
         int[testInput.length] topMaxSum = [24000, 45000];
-        int[testInput.length] top3sum = [45000, 45000];
-        int[testInput.length] elvesCount = [5, 1];
+        int[testInput.length] top3sum = [45000, 45000 * 3];
+        int[testInput.length] elvesCount = [5, 3];
         foreach(inputIndex, input; testInput) {
             arena.used = 0;
             scratch.used = 0;
             Year2022Day1 result = Year2022Day1(input, arena, scratch);
-            assert(result.maxSums[0] == topMaxSum[inputIndex]);
+            assert(result.elves[0].sum == topMaxSum[inputIndex]);
             assert(result.top3sum == top3sum[inputIndex]);
-            assert(result.elfCount == elvesCount[inputIndex]);
+            assert(cast(int)result.elves.length == elvesCount[inputIndex]);
         }
     }
 }

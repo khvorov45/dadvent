@@ -177,7 +177,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         }
 
         // TODO(khvorov) It takes microui 1 frame to catch up to last input.
-        state.draw(muctx, d3d11Renderer.window.width, d3d11Renderer.window.height, cast(int)d3d11Renderer.font.chHeight, scratch);
+        state.draw(muctx, d3d11Renderer.window.width, d3d11Renderer.window.height, scratch);
         for (mu_Command* cmd = null; mu_next_command(muctx, &cmd);) {
             switch (cmd.type) {
             case MU_COMMAND_TEXT: {
