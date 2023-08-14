@@ -64,12 +64,24 @@ struct Year2022Day1 {
 }
 
 struct Year2022Day2 {
-    long[2] result;
+    enum Outcome {
+        Loss,
+        Draw,
+        Win,
+    }
+    struct Round {
+        int score;
+        Outcome outcome;
+    }
+    Round[] rounds;
+    int scorePart1;
+    int scorePart2;
 
     this(string input, ref Arena arena, ref Arena scratch) {
+        long arenaUsedBefore = arena.used;
+        DynArr!Round roundsStorage = DynArr!Round(arena, arena.freesize);
+
         LineRange lines = LineRange(input);
-        long scorePart1 = 0;
-        long scorePart2 = 0;
         foreach (line; lines) {
             assert(line.length == 3);
 
@@ -79,10 +91,10 @@ struct Year2022Day2 {
             char c2 = line.ptr[2];
             assert(c2 == 'X' || c2 == 'Y' || c2 == 'Z');
 
-            long choice1 = c1 - 'A';
+            int choice1 = c1 - 'A';
 
-            long choice2Part1 = c2 - 'X';
-            long scoreOutcomePart1 = 0;
+            int choice2Part1 = c2 - 'X';
+            Outcome outcomePart1 = Outcome.Loss;
             {
                 bool draw = choice1 == choice2Part1;
                 bool lose1 = ((choice1 + 1) % 3) == choice2Part1;
@@ -91,69 +103,70 @@ struct Year2022Day2 {
 
                 if (draw) {
                     assert(!lose1 && !lose2);
-                    scoreOutcomePart1 = 3;
+                    outcomePart1 = Outcome.Draw;
                 } else if (lose1) {
                     assert(!draw && !lose2);
-                    scoreOutcomePart1 = 6;
+                    outcomePart1 = Outcome.Win;
                 }
             }
+            int scoreOutcomePart1 = outcomePart1 * 3;
 
-            long scoreOutcomePart2 = (c2 - 'X') * 3;
-            long choice2Part2 = 0;
+            Outcome outcomePart2 = cast(Outcome)(c2 - 'X');
+            int scoreOutcomePart2 = outcomePart2 * 3;
+            int choice2Part2 = 0;
             switch (scoreOutcomePart2) {
-            case 0:
-                choice2Part2 = (choice1 + 2) % 3;
-                break;
-            case 3:
-                choice2Part2 = choice1;
-                break;
-            case 6:
-                choice2Part2 = (choice1 + 1) % 3;
-                break;
-            default:
-                assert(false, "unreachable");
+            case 0: choice2Part2 = (choice1 + 2) % 3; break;
+            case 3: choice2Part2 = choice1; break;
+            case 6: choice2Part2 = (choice1 + 1) % 3; break;
+            default: assert(false, "unreachable");
             }
 
-            scorePart1 += scoreOutcomePart1 + choice2Part1 + 1;
-            scorePart2 += scoreOutcomePart2 + choice2Part2 + 1;
+            int scoreRoundPart1 = scoreOutcomePart1 + choice2Part1 + 1;
+            int scoreRoundPart2 = scoreOutcomePart2 + choice2Part2 + 1;
+            scorePart1 += scoreRoundPart1;
+            scorePart2 += scoreRoundPart2;
+
+            Round round = {scoreRoundPart1, outcomePart1};
+            roundsStorage.push(round);
         }
 
-        result = [scorePart1, scorePart2];
+        rounds = roundsStorage.buf[0..roundsStorage.len];
+        arena.used = arenaUsedBefore + roundsStorage.len * Round.sizeof;
     }
 }
 
 struct Year2022Day3 {
-    long[2] result;
+    int[2] result;
 
     this(string input, ref Arena arena, ref Arena scratch) {
         LineRange lines = LineRange(input);
 
-        const long maxPriority = 52;
+        const int maxPriority = 52;
         bool[maxPriority + 1][3] groupLinePriorities;
-        long curGroupLineIndex = 0;
+        int curGroupLineIndex = 0;
 
-        long sharedItemsPrioritySum = 0;
-        long badgePrioritySum = 0;
+        int sharedItemsPrioritySum = 0;
+        int badgePrioritySum = 0;
         foreach (line; lines) {
             assert(line.length % 2 == 0);
-            long perCompartment = line.length / 2;
+            int perCompartment = cast(int)line.length / 2;
             string comp1 = line[0 .. perCompartment];
             string comp2 = line[perCompartment .. line.length];
 
             bool[maxPriority + 1] comp1Priorities;
             bool[maxPriority + 1] comp2Priorities;
-            for (long ind = 0; ind < perCompartment; ind++) {
+            for (int ind = 0; ind < perCompartment; ind++) {
                 char comp1Item = comp1[ind];
                 char comp2Item = comp2[ind];
 
-                long getpriority(char ch) {
+                int getpriority(char ch) {
                     assert((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'));
-                    long priority = ch >= 'a' ? ch - 'a' + 1 : ch - 'A' + 27;
+                    int priority = ch >= 'a' ? ch - 'a' + 1 : ch - 'A' + 27;
                     return priority;
                 }
 
-                long comp1ItemPriority = getpriority(comp1Item);
-                long comp2ItemPriority = getpriority(comp2Item);
+                int comp1ItemPriority = getpriority(comp1Item);
+                int comp2ItemPriority = getpriority(comp2Item);
 
                 comp1Priorities[comp1ItemPriority] = true;
                 comp2Priorities[comp2ItemPriority] = true;
@@ -163,7 +176,7 @@ struct Year2022Day3 {
             }
 
             bool foundShared = false;
-            for (long priority = 1; priority <= maxPriority; priority++) {
+            for (int priority = 1; priority <= maxPriority; priority++) {
                 bool incomp1 = comp1Priorities[priority];
                 bool incomp2 = comp2Priorities[priority];
                 if (incomp1 && incomp2) {
@@ -176,7 +189,7 @@ struct Year2022Day3 {
 
             if (curGroupLineIndex == 2) {
                 bool foundBadge = false;
-                for (long priority = 1; priority <= maxPriority; priority++) {
+                for (int priority = 1; priority <= maxPriority; priority++) {
                     bool g0 = groupLinePriorities[0][priority];
                     bool g1 = groupLinePriorities[1][priority];
                     bool g2 = groupLinePriorities[2][priority];
@@ -189,7 +202,7 @@ struct Year2022Day3 {
                 assert(foundBadge);
 
                 curGroupLineIndex = 0;
-                for (long i = 0; i < groupLinePriorities.length; i++) {
+                for (int i = 0; i < groupLinePriorities.length; i++) {
                     bool[] arr = groupLinePriorities[i];
                     memset(arr.ptr, 0, arr.length * arr[0].sizeof);
                 }
@@ -439,7 +452,7 @@ alias Solution = SumType!(Year2022Day1, Year2022Day2, Year2022Day3);
 
 struct State {
     Solution[Solution.Types.length] solutions;
-    int activeSolution;
+    int activeSolution = 1;
 
     this(ref Arena arena, ref Arena scratch) {
         {
@@ -450,6 +463,10 @@ struct State {
                 static if (typeName == "Year2022Day1") {
                     assert(thisSolution.elves[0].sum == 68802);
                     assert(thisSolution.top3sum == 205370);
+                }
+                static if (typeName == "Year2022Day2") {
+                    assert(thisSolution.scorePart1 == 12645);
+                    assert(thisSolution.scorePart2 == 11756);
                 }
                 mixin("solutions[", typeIndex, "] = thisSolution;");
             }}
@@ -492,12 +509,44 @@ struct State {
             return newvalInt;
         }
 
+        mu_Rect cutTop(ref mu_Rect rect, int by) {
+            mu_Rect result = rect;
+            result.h = by;
+            rect.h -= by;
+            rect.y += by;
+            return result;
+        }
+
+        mu_Rect cutBottom(ref mu_Rect rect, int by) {
+            mu_Rect result = rect;
+            result.h = by;
+            result.y = rect.y + rect.h - by;
+            rect.h -= by;
+            return result;
+        }
+
+        mu_Rect cutLeft(ref mu_Rect rect, int by) {
+            mu_Rect result = rect;
+            result.w = by;
+            rect.w -= by;
+            rect.x += by;
+            return result;
+        }
+
+        mu_Rect cutRight(ref mu_Rect rect, int by) {
+            mu_Rect result = rect;
+            result.w = by;
+            result.x = rect.x + rect.w - by;
+            rect.w -= by;
+            return result;
+        }
+
         mu_begin(muctx);
         if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, windowWidth, windowHeight), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
             layout_row([200, -1], -1);
 
-            mu_begin_panel_ex(muctx, "SolutionSelector", MU_OPT_NOFRAME);
             {
+                mu_begin_panel_ex(muctx, "SolutionSelector", MU_OPT_NOFRAME);
                 layout_row([-1], 20);
 
                 static foreach (typeIndex, type; Solution.Types) {{
@@ -512,22 +561,41 @@ struct State {
                     }
                     muctx.style.colors[MU_COLOR_BUTTON..MU_COLOR_BUTTONFOCUS + 1] = oldColors;
                 }}
+
+                mu_end_panel(muctx);
             }
-            mu_end_panel(muctx);
 
             mu_begin_panel_ex(muctx, "Solution", MU_OPT_NOFRAME);
+
+            {
+                layout_row([-1], cast(int)fontHeight * 2);
+                mu_begin_panel_ex(muctx, "SolutionResultString", MU_OPT_NOFRAME);
+                layout_row([-1], cast(int)fontHeight);
+                struct int2 {int x; int y;} // NOTE(khvorov) The D compiler is bad and incapable of handling int[2] here
+                int2 result2Numbers = solutions[activeSolution].match!(
+                    (ref Year2022Day1 sol) { return int2(sol.elves[0].sum, sol.top3sum); },
+                    (ref Year2022Day2 sol) { return int2(sol.scorePart1, sol.scorePart2); },
+                    (ref Year2022Day3 sol) { return int2(sol.result[0], sol.result[1]); },
+                );
+                string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(result2Numbers.x).fmt(" Part 2: ").fmt(result2Numbers.y).endNull();
+                mu_text(muctx, resultStr.ptr);
+                mu_end_panel(muctx);
+            }
+
+            // From http://tsitsul.in/pdf/colors/dark_6.pdf
+            mu_Color[6] qualitativePalette = [
+                mu_color(0, 89, 0, 255),
+                mu_color(0, 0, 120, 255),
+                mu_color(73, 13, 0, 255),
+                mu_color(138, 3, 79, 255),
+                mu_color(0, 90, 138, 255),
+                mu_color(68, 53 ,0, 255),
+            ];
+            mu_Color qualitativePaletteGray = mu_color(88, 88, 88, 255);
+
             // TODO(khvorov) Fill
             solutions[activeSolution].match!(
                 (ref Year2022Day1 sol) {
-                    layout_row([-1], cast(int)fontHeight * 2);
-                    mu_begin_panel_ex(muctx, "SolutionResultString", MU_OPT_NOFRAME);
-                    {
-                        layout_row([-1], cast(int)fontHeight);
-                        string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(sol.elves[0].sum).fmt(" Part 2: ").fmt(sol.top3sum).endNull();
-                        mu_text(muctx, resultStr.ptr);
-                    }
-                    mu_end_panel(muctx);
-
                     layout_row([100, -1], -1);
                     mu_begin_panel_ex(muctx, "HistogramScale", MU_OPT_NOFRAME);
                     layout_row([-1], -1);
@@ -535,16 +603,7 @@ struct State {
                     mu_end_panel(muctx);
 
                     {
-                        // From http://tsitsul.in/pdf/colors/dark_6.pdf
-                        mu_Color[6] histColors = [
-                            mu_color(0, 89, 0, 255),
-                            mu_color(0, 0, 120, 255),
-                            mu_color(73, 13, 0, 255),
-                            mu_color(138, 3, 79, 255),
-                            mu_color(0, 90, 138, 255),
-                            mu_color(68, 53 ,0, 255),
-                        ];
-                        mu_Color histBorderColor = mu_color(88, 88, 88, 255);
+                        mu_Color histBorderColor = qualitativePaletteGray;
                         mu_Color gridColor = mu_color(50, 50, 50, 255);
                         mu_Color axisColor = mu_color(150, 150, 150, 255);
 
@@ -598,8 +657,8 @@ struct State {
                                 int yFromBase = scaleToPx(count);
                                 calorieRect.h = (rectBounds.y + rectBounds.h) - yFromBase;
                                 calorieRect.y -= calorieRect.h;
-                                drawRectWithBorder(calorieRect, histColors[calorieRectColorIndex], histBorderColor);
-                                calorieRectColorIndex = (calorieRectColorIndex + 1) % histColors.length;
+                                drawRectWithBorder(calorieRect, qualitativePalette[calorieRectColorIndex], histBorderColor);
+                                calorieRectColorIndex = (calorieRectColorIndex + 1) % qualitativePalette.length;
                             }
                             histRect.x += histRect.w;
                         }
@@ -607,7 +666,49 @@ struct State {
                     }
                 },
 
-                (ref Year2022Day2 sol) {},
+                (ref Year2022Day2 sol) {
+                    layout_row([-1], -1);
+                    mu_begin_panel_ex(muctx, "RockPaperScissorsOutcomes", MU_OPT_NOFRAME);
+                    layout_row([-1], 20000); // TODO(khvorov) Work out the height
+
+                    // TODO(khvorov) Visualise part 2
+
+                    const mu_Rect totalBounds = mu_layout_next(muctx);
+                    mu_Rect rectBounds = totalBounds;
+                    mu_Rect topAxisBounds = cutTop(rectBounds, fontHeight);
+                    mu_Rect leftNumbersBounds = cutLeft(rectBounds, fontChWidth * 2);
+                    cutLeft(topAxisBounds, leftNumbersBounds.w);
+
+                    float scorePerRow = 1000;
+                    float pxPerRow = cast(float)rectBounds.w;
+                    float pxPerScore = pxPerRow / scorePerRow;
+                    mu_Rect roundRect = mu_rect(rectBounds.x, rectBounds.y, 0, fontHeight);
+                    int rowCount = 1;
+                    int scoreSum = 0;
+                    foreach (round; sol.rounds) {
+                        roundRect.w = cast(int)(cast(float)round.score * pxPerScore);
+                        scoreSum += round.score;
+                        if (scoreSum > 1000) {
+                            scoreSum = round.score;
+                            rowCount += 1;
+                            roundRect.x = rectBounds.x;
+                            roundRect.y += roundRect.h;
+                            assert(roundRect.x + roundRect.w < rectBounds.x + rectBounds.w);
+                        }
+                        drawRectWithBorder(roundRect, qualitativePalette[round.outcome], qualitativePaletteGray);
+                        roundRect.x += roundRect.w;
+                    }
+
+                    mu_Vec2 rowNumberPos = mu_Vec2(leftNumbersBounds.x, leftNumbersBounds.y);
+                    for (int row = 1; row <= rowCount; row++) {
+                        string rowStr = StringBuilder(scratch).fmt(row).end();
+                        mu_draw_text(muctx, muctx.style.font, rowStr.ptr, cast(int)rowStr.length, rowNumberPos, mu_color(200, 200, 200, 255));
+                        rowNumberPos.y += fontHeight;
+                    }
+
+                    mu_end_panel(muctx);
+                },
+
                 (ref Year2022Day3 sol) {}
             );
             mu_end_panel(muctx);
