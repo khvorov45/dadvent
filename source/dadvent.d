@@ -593,6 +593,9 @@ struct State {
             ];
             mu_Color qualitativePaletteGray = mu_color(88, 88, 88, 255);
 
+            mu_Color gridColor = mu_color(50, 50, 50, 255);
+            mu_Color axisColor = mu_color(150, 150, 150, 255);
+
             // TODO(khvorov) Fill
             solutions[activeSolution].match!(
                 (ref Year2022Day1 sol) {
@@ -604,9 +607,6 @@ struct State {
 
                     {
                         mu_Color histBorderColor = qualitativePaletteGray;
-                        mu_Color gridColor = mu_color(50, 50, 50, 255);
-                        mu_Color axisColor = mu_color(150, 150, 150, 255);
-
                         int histRectWidth = 10;
 
                         mu_begin_panel_ex(muctx, "HistogramRects", MU_OPT_NOFRAME);
@@ -673,7 +673,8 @@ struct State {
 
                     // TODO(khvorov) Visualise part 2
 
-                    const mu_Rect totalBounds = mu_layout_next(muctx);
+                    mu_Rect totalBounds = mu_layout_next(muctx);
+                    cutRight(totalBounds, 50);
                     mu_Rect rectBounds = totalBounds;
                     mu_Rect topAxisBounds = cutTop(rectBounds, fontHeight);
                     mu_Rect leftNumbersBounds = cutLeft(rectBounds, fontChWidth * 2);
@@ -686,7 +687,7 @@ struct State {
                     int rowCount = 1;
                     int scoreSum = 0;
                     foreach (round; sol.rounds) {
-                        roundRect.w = cast(int)(cast(float)round.score * pxPerScore);
+                        roundRect.w = cast(int)(cast(float)round.score * pxPerScore + 0.5);
                         scoreSum += round.score;
                         if (scoreSum > 1000) {
                             scoreSum = round.score;
@@ -702,8 +703,15 @@ struct State {
                     mu_Vec2 rowNumberPos = mu_Vec2(leftNumbersBounds.x, leftNumbersBounds.y);
                     for (int row = 1; row <= rowCount; row++) {
                         string rowStr = StringBuilder(scratch).fmt(row).end();
-                        mu_draw_text(muctx, muctx.style.font, rowStr.ptr, cast(int)rowStr.length, rowNumberPos, mu_color(200, 200, 200, 255));
+                        mu_draw_text(muctx, muctx.style.font, rowStr.ptr, cast(int)rowStr.length, rowNumberPos, axisColor);
                         rowNumberPos.y += fontHeight;
+                    }
+
+                    for (int tickValue = 0; tickValue <= cast(int)scorePerRow; tickValue += 100) {
+                        int tickPx = scale(tickValue, 0, cast(int)scorePerRow, topAxisBounds.x, topAxisBounds.x + topAxisBounds.w);
+                        string tickStr = StringBuilder(scratch).fmt(tickValue).end();
+                        int strCentered = tickPx - cast(int)tickStr.length * fontChWidth / 2;
+                        mu_draw_text(muctx, muctx.style.font, tickStr.ptr, cast(int)tickStr.length, mu_vec2(strCentered, topAxisBounds.y), axisColor);
                     }
 
                     mu_end_panel(muctx);
