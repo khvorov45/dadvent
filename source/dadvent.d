@@ -73,13 +73,17 @@ struct Year2022Day2 {
         int score;
         Outcome outcome;
     }
-    Round[] rounds;
+    Round[] roundsPart1;
+    Round[] roundsPart2;
     int scorePart1;
     int scorePart2;
 
     this(string input, ref Arena arena, ref Arena scratch) {
+        TempMemory _TEMP_ = TempMemory(scratch);
+
         long arenaUsedBefore = arena.used;
-        DynArr!Round roundsStorage = DynArr!Round(arena, arena.freesize);
+        DynArr!Round roundsPart1Storage = DynArr!Round(arena, arena.freesize);
+        DynArr!Round roundsPart2Storage = DynArr!Round(scratch, scratch.freesize);
 
         LineRange lines = LineRange(input);
         foreach (line; lines) {
@@ -126,12 +130,17 @@ struct Year2022Day2 {
             scorePart1 += scoreRoundPart1;
             scorePart2 += scoreRoundPart2;
 
-            Round round = {scoreRoundPart1, outcomePart1};
-            roundsStorage.push(round);
+            Round roundPart1 = {scoreRoundPart1, outcomePart1};
+            roundsPart1Storage.push(roundPart1);
+
+            Round roundPart2 = {scoreRoundPart2, outcomePart2};
+            roundsPart2Storage.push(roundPart2);
         }
 
-        rounds = roundsStorage.buf[0..roundsStorage.len];
-        arena.used = arenaUsedBefore + roundsStorage.len * Round.sizeof;
+        roundsPart1 = roundsPart1Storage.buf[0..roundsPart1Storage.len];
+        arena.used = arenaUsedBefore + roundsPart1Storage.len * Round.sizeof;
+
+        roundsPart2 = roundsPart2Storage.copy(arena);
     }
 }
 
@@ -670,8 +679,7 @@ struct State {
                     layout_row([-1], -1);
                     mu_begin_panel_ex(muctx, "RockPaperScissorsOutcomes", MU_OPT_NOFRAME);
                     layout_row([-1], 20000); // TODO(khvorov) Work out the height
-
-                    // TODO(khvorov) Visualise part 2
+                    // TODO(khvorov) Draw the legend
 
                     mu_Rect totalBounds = mu_layout_next(muctx);
                     cutRight(totalBounds, 50);
@@ -684,27 +692,35 @@ struct State {
                     float pxPerRow = cast(float)rectBounds.w;
                     float pxPerScore = pxPerRow / scorePerRow;
                     mu_Rect roundRect = mu_rect(rectBounds.x, rectBounds.y, 0, fontHeight);
-                    int rowCount = 1;
-                    int scoreSum = 0;
-                    foreach (round; sol.rounds) {
-                        roundRect.w = cast(int)(cast(float)round.score * pxPerScore + 0.5);
-                        scoreSum += round.score;
-                        if (scoreSum > 1000) {
-                            scoreSum = round.score;
-                            rowCount += 1;
-                            roundRect.x = rectBounds.x;
-                            roundRect.y += roundRect.h;
-                            assert(roundRect.x + roundRect.w < rectBounds.x + rectBounds.w);
-                        }
-                        drawRectWithBorder(roundRect, qualitativePalette[round.outcome], qualitativePaletteGray);
-                        roundRect.x += roundRect.w;
-                    }
 
-                    mu_Vec2 rowNumberPos = mu_Vec2(leftNumbersBounds.x, leftNumbersBounds.y);
-                    for (int row = 1; row <= rowCount; row++) {
-                        string rowStr = StringBuilder(scratch).fmt(row).end();
-                        mu_draw_text(muctx, muctx.style.font, rowStr.ptr, cast(int)rowStr.length, rowNumberPos, axisColor);
-                        rowNumberPos.y += fontHeight;
+                    Year2022Day2.Round[][2] roundSets = [sol.roundsPart1, sol.roundsPart2];
+                    foreach (roundSet; roundSets) {
+                        int rowCount = 1;
+                        int scoreSum = 0;
+                        foreach (round; roundSet) {
+                            roundRect.w = cast(int)(cast(float)round.score * pxPerScore + 0.5);
+                            scoreSum += round.score;
+                            if (scoreSum > 1000) {
+                                scoreSum = round.score;
+                                rowCount += 1;
+                                roundRect.x = rectBounds.x;
+                                roundRect.y += roundRect.h;
+                                assert(roundRect.x + roundRect.w < rectBounds.x + rectBounds.w);
+                            }
+                            drawRectWithBorder(roundRect, qualitativePalette[round.outcome], qualitativePaletteGray);
+                            roundRect.x += roundRect.w;
+                        }
+
+                        mu_Vec2 rowNumberPos = mu_Vec2(leftNumbersBounds.x, leftNumbersBounds.y);
+                        for (int row = 1; row <= rowCount; row++) {
+                            string rowStr = StringBuilder(scratch).fmt(row).end();
+                            mu_draw_text(muctx, muctx.style.font, rowStr.ptr, cast(int)rowStr.length, rowNumberPos, axisColor);
+                            rowNumberPos.y += fontHeight;
+                        }
+
+                        roundRect.x = rectBounds.x;
+                        roundRect.y += 100;
+                        leftNumbersBounds.y = roundRect.y;
                     }
 
                     for (int tickValue = 0; tickValue <= cast(int)scorePerRow; tickValue += 100) {
