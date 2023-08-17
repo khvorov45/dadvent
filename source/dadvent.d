@@ -678,20 +678,27 @@ struct State {
                 (ref Year2022Day2 sol) {
                     layout_row([-1], -1);
                     mu_begin_panel_ex(muctx, "RockPaperScissorsOutcomes", MU_OPT_NOFRAME);
-                    layout_row([-1], 20000); // TODO(khvorov) Work out the height
-                    // TODO(khvorov) Draw the legend
+
+                    int topAxisBoundsHeight = fontHeight;
+                    int roundRectHeight = fontHeight;
+                    int gapBetweenParts = 100;
+                    float scorePerRow = 1000;
+                    int rowsInPart1 = sol.scorePart1 / cast(int)scorePerRow + 1;
+                    int rowsInPart2 = sol.scorePart2 / cast(int)scorePerRow + 1;
+                    int totalHeight = topAxisBoundsHeight + rowsInPart1 * roundRectHeight + gapBetweenParts + rowsInPart2 * roundRectHeight;
+
+                    layout_row([-1], totalHeight);
 
                     mu_Rect totalBounds = mu_layout_next(muctx);
                     cutRight(totalBounds, 50);
                     mu_Rect rectBounds = totalBounds;
-                    mu_Rect topAxisBounds = cutTop(rectBounds, fontHeight);
+                    mu_Rect topAxisBounds = cutTop(rectBounds, topAxisBoundsHeight);
                     mu_Rect leftNumbersBounds = cutLeft(rectBounds, fontChWidth * 2);
                     cutLeft(topAxisBounds, leftNumbersBounds.w);
 
-                    float scorePerRow = 1000;
                     float pxPerRow = cast(float)rectBounds.w;
                     float pxPerScore = pxPerRow / scorePerRow;
-                    mu_Rect roundRect = mu_rect(rectBounds.x, rectBounds.y, 0, fontHeight);
+                    mu_Rect roundRect = mu_rect(rectBounds.x, rectBounds.y, 0, roundRectHeight);
 
                     Year2022Day2.Round[][2] roundSets = [sol.roundsPart1, sol.roundsPart2];
                     foreach (roundSet; roundSets) {
@@ -719,7 +726,7 @@ struct State {
                         }
 
                         roundRect.x = rectBounds.x;
-                        roundRect.y += 100;
+                        roundRect.y += gapBetweenParts;
                         leftNumbersBounds.y = roundRect.y;
                     }
 
@@ -728,6 +735,20 @@ struct State {
                         string tickStr = StringBuilder(scratch).fmt(tickValue).end();
                         int strCentered = tickPx - cast(int)tickStr.length * fontChWidth / 2;
                         mu_draw_text(muctx, muctx.style.font, tickStr.ptr, cast(int)tickStr.length, mu_vec2(strCentered, topAxisBounds.y), axisColor);
+                    }
+
+                    int legendCenterY = totalBounds.y + topAxisBoundsHeight + rowsInPart1 * roundRectHeight + gapBetweenParts / 2 - fontHeight / 2;
+                    mu_Vec2 legendPos = mu_vec2(totalBounds.x, legendCenterY);
+                    string[sol.Outcome.max + 1] outcomeStrs;
+                    static foreach (outcomeIndex; 0..(sol.Outcome.max + 1)) {outcomeStrs[outcomeIndex] = __traits(allMembers, sol.Outcome)[outcomeIndex];}
+                    for (int outcomeIndex = 0; outcomeIndex <= sol.Outcome.max; outcomeIndex++) {
+                        string outcomeStr = outcomeStrs[outcomeIndex];
+                        mu_Color outcomeColor = qualitativePalette[outcomeIndex];
+                        mu_Rect squareRect = mu_rect(legendPos.x, legendPos.y, 10, fontHeight);
+                        drawRectWithBorder(squareRect, outcomeColor, qualitativePaletteGray);
+                        legendPos.x += squareRect.w + 5;
+                        mu_draw_text(muctx, muctx.style.font, outcomeStr.ptr, cast(int)outcomeStr.length, legendPos, axisColor);
+                        legendPos.x += outcomeStr.length * fontChWidth + 10;
                     }
 
                     mu_end_panel(muctx);
