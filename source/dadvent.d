@@ -23,8 +23,7 @@ struct Year2022Day1 {
         int itemIndexStart = 0;
         int curItemIndex = 0;
 
-        long arenaUsedBefore = arena.used;
-        DynArr!int caloriesStorageDyn = DynArr!int(arena, arena.freesize);
+        DynArr!int caloriesStorageDyn = DynArr!int(arena);
         DynArr!Elf elvesScratch = DynArr!Elf(scratch, scratch.freesize);
         for (;;) {
             string thisLine = lines.line;
@@ -47,10 +46,7 @@ struct Year2022Day1 {
             }
         }
 
-        long caloriesSizeUsed = caloriesStorageDyn.len * int.sizeof;
-        arena.used = arenaUsedBefore + caloriesSizeUsed;
-
-        caloriesStorage = caloriesStorageDyn.buf[0..caloriesStorageDyn.len];
+        caloriesStorage = caloriesStorageDyn.toSlice();
         elves = elvesScratch.copy(arena);
 
         import std.algorithm.sorting;
@@ -81,8 +77,7 @@ struct Year2022Day2 {
     this(string input, ref Arena arena, ref Arena scratch) {
         TempMemory _TEMP_ = TempMemory(scratch);
 
-        long arenaUsedBefore = arena.used;
-        DynArr!Round roundsPart1Storage = DynArr!Round(arena, arena.freesize);
+        DynArr!Round roundsPart1Storage = DynArr!Round(arena);
         DynArr!Round roundsPart2Storage = DynArr!Round(scratch, scratch.freesize);
 
         LineRange lines = LineRange(input);
@@ -137,25 +132,34 @@ struct Year2022Day2 {
             roundsPart2Storage.push(roundPart2);
         }
 
-        roundsPart1 = roundsPart1Storage.buf[0..roundsPart1Storage.len];
-        arena.used = arenaUsedBefore + roundsPart1Storage.len * Round.sizeof;
-
+        roundsPart1 = roundsPart1Storage.toSlice();
         roundsPart2 = roundsPart2Storage.copy(arena);
     }
 }
 
 struct Year2022Day3 {
-    int[2] result;
+    struct Backpack {
+        string comp1;
+        string comp2;
+        char common;
+    }
+    Backpack[] backpacks;
+    char[] badges;
+    int sharedItemsPrioritySum;
+    int badgePrioritySum;
 
     this(string input, ref Arena arena, ref Arena scratch) {
+        TempMemory _TEMP_ = TempMemory(scratch);
+
         LineRange lines = LineRange(input);
 
         const int maxPriority = 52;
         bool[maxPriority + 1][3] groupLinePriorities;
         int curGroupLineIndex = 0;
 
-        int sharedItemsPrioritySum = 0;
-        int badgePrioritySum = 0;
+        DynArr!Backpack backpackStorage = DynArr!Backpack(arena);
+        DynArr!char badgeStorage = DynArr!char(scratch);
+
         foreach (line; lines) {
             assert(line.length % 2 == 0);
             int perCompartment = cast(int)line.length / 2;
@@ -185,19 +189,24 @@ struct Year2022Day3 {
             }
 
             bool foundShared = false;
+            int sharedPriority = 0;
             for (int priority = 1; priority <= maxPriority; priority++) {
                 bool incomp1 = comp1Priorities[priority];
                 bool incomp2 = comp2Priorities[priority];
                 if (incomp1 && incomp2) {
                     assert(!foundShared);
                     foundShared = true;
+                    sharedPriority = priority;
                     sharedItemsPrioritySum += priority;
                 }
             }
             assert(foundShared);
 
+            char getchFromPriority(int priority) => cast(char)(priority <= 26 ? (priority - 1) + 'a' : (priority - 27) + 'A');
+
             if (curGroupLineIndex == 2) {
                 bool foundBadge = false;
+                int badgePriority = 0;
                 for (int priority = 1; priority <= maxPriority; priority++) {
                     bool g0 = groupLinePriorities[0][priority];
                     bool g1 = groupLinePriorities[1][priority];
@@ -205,6 +214,7 @@ struct Year2022Day3 {
                     if (g0 && g1 && g2) {
                         assert(!foundBadge);
                         foundBadge = true;
+                        badgePriority = priority;
                         badgePrioritySum += priority;
                     }
                 }
@@ -215,12 +225,22 @@ struct Year2022Day3 {
                     bool[] arr = groupLinePriorities[i];
                     memset(arr.ptr, 0, arr.length * arr[0].sizeof);
                 }
+
+                char badgeCh = getchFromPriority(badgePriority);
+                badgeStorage.push(badgeCh);
             } else {
                 curGroupLineIndex += 1;
             }
+
+            char sharedChar = getchFromPriority(sharedPriority);
+            Backpack backpack = {comp1, comp2, sharedChar};
+            backpackStorage.push(backpack);
         }
 
-        result = [sharedItemsPrioritySum, badgePrioritySum];
+        backpacks = backpackStorage.toSlice();
+        badges = badgeStorage.copy(arena);
+        assert(backpacks.length / 3 == badges.length);
+        assert(badges.length * 3 == backpacks.length);
     }
 }
 
@@ -365,11 +385,23 @@ struct LineRange {
 
 struct DynArr(T) {
     T[] buf;
+    Arena* arena;
     long len;
+    long arenaUsedBefore;
 
-    this(ref Arena arena, long bytes) {
+    this(Arena* arena_, long bytes) {
+        arena = arena_;
+        arenaUsedBefore = arena.used;
         buf = arena.alloc!(T)(bytes);
         len = 0;
+    }
+
+    this(ref Arena arena_, long bytes) {
+        this(&arena_, bytes);
+    }
+
+    this(ref Arena arena_) {
+        this(&arena_, arena_.freesize);
     }
 
     void push(T val) {
@@ -377,10 +409,16 @@ struct DynArr(T) {
         len += 1;
     }
 
-    T[] copy(ref Arena arena) {
+    T[] copy(ref Arena destArena) {
         long bytes = len * T.sizeof;
-        T[] result = arena.alloc!T(bytes, T.alignof);
+        T[] result = destArena.alloc!T(bytes, T.alignof);
         memcpy(result.ptr, buf.ptr, bytes);
+        return result;
+    }
+
+    T[] toSlice() {
+        arena.used = arenaUsedBefore + len * T.sizeof;
+        T[] result = buf[0..len];
         return result;
     }
 }
@@ -461,7 +499,7 @@ alias Solution = SumType!(Year2022Day1, Year2022Day2, Year2022Day3);
 
 struct State {
     Solution[Solution.Types.length] solutions;
-    int activeSolution = 1;
+    int activeSolution = 2;
 
     this(ref Arena arena, ref Arena scratch) {
         {
@@ -476,6 +514,10 @@ struct State {
                 static if (typeName == "Year2022Day2") {
                     assert(thisSolution.scorePart1 == 12645);
                     assert(thisSolution.scorePart2 == 11756);
+                }
+                static if (typeName == "Year2022Day3") {
+                    assert(thisSolution.sharedItemsPrioritySum == 7674);
+                    assert(thisSolution.badgePrioritySum == 2805);
                 }
                 mixin("solutions[", typeIndex, "] = thisSolution;");
             }}
@@ -584,7 +626,7 @@ struct State {
                 int2 result2Numbers = solutions[activeSolution].match!(
                     (ref Year2022Day1 sol) { return int2(sol.elves[0].sum, sol.top3sum); },
                     (ref Year2022Day2 sol) { return int2(sol.scorePart1, sol.scorePart2); },
-                    (ref Year2022Day3 sol) { return int2(sol.result[0], sol.result[1]); },
+                    (ref Year2022Day3 sol) { return int2(sol.sharedItemsPrioritySum, sol.badgePrioritySum); },
                 );
                 string resultStr = StringBuilder(scratch).fmt("Part 1: ").fmt(result2Numbers.x).fmt(" Part 2: ").fmt(result2Numbers.y).endNull();
                 mu_text(muctx, resultStr.ptr);
@@ -605,7 +647,6 @@ struct State {
             mu_Color gridColor = mu_color(50, 50, 50, 255);
             mu_Color axisColor = mu_color(150, 150, 150, 255);
 
-            // TODO(khvorov) Fill
             solutions[activeSolution].match!(
                 (ref Year2022Day1 sol) {
                     layout_row([100, -1], -1);
@@ -712,7 +753,6 @@ struct State {
                                 rowCount += 1;
                                 roundRect.x = rectBounds.x;
                                 roundRect.y += roundRect.h;
-                                assert(roundRect.x + roundRect.w < rectBounds.x + rectBounds.w);
                             }
                             drawRectWithBorder(roundRect, qualitativePalette[round.outcome], qualitativePaletteGray);
                             roundRect.x += roundRect.w;
@@ -754,7 +794,49 @@ struct State {
                     mu_end_panel(muctx);
                 },
 
-                (ref Year2022Day3 sol) {}
+                (ref Year2022Day3 sol) {
+                    layout_row([-1], -1);
+                    mu_begin_panel_ex(muctx, "Backpacks", MU_OPT_NOFRAME);
+
+                    int totalHeight = 20000; // TODO(khvorov) Work out
+                    layout_row([-1], totalHeight);
+                    mu_Rect totalBounds = mu_layout_next(muctx);
+
+                    mu_Rect compRect = mu_rect(totalBounds.x, totalBounds.y, 0, fontHeight * 2);
+                    foreach (backpackIndex, backpack; sol.backpacks) {
+                        int padding = 10;
+                        compRect.w = cast(int)backpack.comp1.length * fontChWidth + padding;
+                        if (compRect.x + compRect.w > totalBounds.x + totalBounds.w) {
+                            compRect.x = totalBounds.x;
+                            compRect.y += compRect.h;
+                        }
+                        drawRectWithBorder(compRect, qualitativePalette[backpackIndex % qualitativePalette.length], qualitativePaletteGray);
+
+                        void drawstr(string str, mu_Vec2 textPos) {
+                            mu_Vec2 chPos = textPos;
+                            char badgeCh = sol.badges[backpackIndex / 3];
+                            foreach(ch; str) {
+                                mu_Color color = axisColor;
+                                if (ch == backpack.common) {
+                                    color.r += 50;
+                                }
+                                if (ch == badgeCh) {
+                                    color.g += 50;
+                                }
+                                mu_draw_text(muctx, muctx.style.font, &ch, 1, chPos, color);
+                                chPos.x += fontChWidth;
+                            }
+                        }
+
+                        mu_Vec2 textPos = mu_vec2(compRect.x + padding / 2, compRect.y);
+                        drawstr(backpack.comp1, textPos);
+                        textPos.y += fontHeight;
+                        drawstr(backpack.comp2, textPos);
+                        compRect.x += compRect.w;
+                    }
+
+                    mu_end_panel(muctx);
+                }
             );
             mu_end_panel(muctx);
 
