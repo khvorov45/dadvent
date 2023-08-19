@@ -29,13 +29,51 @@ extern (Windows) int WinMain(HINSTANCE instance) {
     }
 
     HWND hwnd;
+
+    // NOTE(khvorov) From https://devblogs.microsoft.com/oldnewthing/20100412-00/?p=14353
+    WINDOWPLACEMENT windowPlacement;
+    void toggleFullscreen() {
+        DWORD dwStyle = GetWindowLong(hwnd, GWL_STYLE);
+        if (dwStyle & WS_OVERLAPPEDWINDOW) {
+            BOOL GetWindowPlacementResult = GetWindowPlacement(hwnd, &windowPlacement);
+            assert(GetWindowPlacementResult);
+
+            MONITORINFO monitorInfo = {cbSize: MONITORINFO.sizeof};
+            BOOL GetMonitorInfoResult = GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &monitorInfo);
+            assert(GetMonitorInfoResult);
+
+            SetWindowLong(hwnd, GWL_STYLE, dwStyle & ~WS_OVERLAPPEDWINDOW);
+            SetWindowPos(
+                hwnd,
+                HWND_TOP,
+                monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.top,
+                monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
+                SWP_NOOWNERZORDER | SWP_FRAMECHANGED
+            );
+        } else {
+            SetWindowLong(hwnd, GWL_STYLE, dwStyle | WS_OVERLAPPEDWINDOW);
+            SetWindowPlacement(hwnd, &windowPlacement);
+            SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+    }
+
     {
         wchar[] className = cast(wchar[])"dadventWindowClass";
+
+        
+        extern(Windows) LRESULT wndproc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
+            if (message == WM_DESTROY) {
+                PostQuitMessage(0);
+                return 0;
+            }
+            LRESULT result = DefWindowProcW(hwnd, message, wparam, lparam);
+            return result;
+        }
 
         WNDCLASSEXW windowClass = {
             cbSize: WNDCLASSEXW.sizeof,
             style: 0,
-            lpfnWndProc: &DefWindowProcW,
+            lpfnWndProc: &wndproc,
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: instance,
@@ -69,28 +107,7 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         assert(hwnd);
 
         ShowWindow(hwnd, SW_SHOWNORMAL);
-
-        // NOTE(khvorov) Fullscreen from https://devblogs.microsoft.com/oldnewthing/20100412-00/?p=14353
-        {
-            WINDOWPLACEMENT windowPlacement;
-            BOOL GetWindowPlacementResult = GetWindowPlacement(hwnd, &windowPlacement);
-            assert(GetWindowPlacementResult);
-
-            MONITORINFO monitorInfo = {cbSize: MONITORINFO.sizeof};
-            BOOL GetMonitorInfoResult = GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &monitorInfo);
-            assert(GetMonitorInfoResult);
-
-            DWORD dwStyle = GetWindowLong(hwnd, GWL_STYLE);
-            assert(dwStyle & WS_OVERLAPPEDWINDOW);
-            SetWindowLong(hwnd, GWL_STYLE, dwStyle & ~WS_OVERLAPPEDWINDOW);
-            SetWindowPos(
-                hwnd,
-                HWND_TOP,
-                monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.top,
-                monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
-                SWP_NOOWNERZORDER | SWP_FRAMECHANGED
-            );
-        }
+        toggleFullscreen();
     }
 
     D3D11Renderer d3d11Renderer = D3D11Renderer(hwnd);
@@ -124,59 +141,62 @@ extern (Windows) int WinMain(HINSTANCE instance) {
         assert(arena.tempCount_ == 0);
         TempMemory _TEMP_ = TempMemory(scratch);
 
-        MSG message;
-        if (GetMessageA(&message, hwnd, 0, 0) == -1) {
-            break mainloop;
-        }
+        for (MSG message; PeekMessageA(&message, null, 0, 0, PM_REMOVE);) {
+            switch (message.message) {
+            ushort loword(ulong l) => cast(ushort)l;
+            ushort hiword(ulong l) => cast(ushort)(l >>> 16);
+            short getWheelDelta(WPARAM wparam) => cast(SHORT)hiword(wparam);
 
-        switch (message.message) {
-        ushort loword(ulong l) => cast(ushort)l;
-        ushort hiword(ulong l) => cast(ushort)(l >>> 16);
-        short getWheelDelta(WPARAM wparam) => cast(SHORT)hiword(wparam);
+            case WM_QUIT: break mainloop;
 
-        case WM_QUIT:
-            break mainloop;
-
-        case WM_MOUSEMOVE: mu_input_mousemove(muctx, loword(message.lParam), hiword(message.lParam)); break;
-        case WM_LBUTTONDOWN: mu_input_mousedown(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
-        case WM_LBUTTONUP: mu_input_mouseup(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
-        case WM_MOUSEWHEEL: {
-            ushort mods = loword(message.wParam);
-            bool shift = (mods & MK_SHIFT) != 0;
-            if (shift) {
-                mu_input_scroll(muctx, -getWheelDelta(message.wParam), 0);
-            } else {
-                mu_input_scroll(muctx, 0, -getWheelDelta(message.wParam));
-            }
-        } break;
-
-        case WM_KEYDOWN: {
-            switch (message.wParam) {
-            case VK_UP: {
-                if (state.activeSolution == 0) {
-                    state.activeSolution = Solution.Types.length - 1;
+            case WM_MOUSEMOVE: mu_input_mousemove(muctx, loword(message.lParam), hiword(message.lParam)); break;
+            case WM_LBUTTONDOWN: mu_input_mousedown(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
+            case WM_LBUTTONUP: mu_input_mouseup(muctx, loword(message.lParam), hiword(message.lParam), MU_MOUSE_LEFT); break;
+            case WM_MOUSEWHEEL: {
+                ushort mods = loword(message.wParam);
+                bool shift = (mods & MK_SHIFT) != 0;
+                if (shift) {
+                    mu_input_scroll(muctx, -getWheelDelta(message.wParam), 0);
                 } else {
-                    state.activeSolution -= 1;
+                    mu_input_scroll(muctx, 0, -getWheelDelta(message.wParam));
                 }
             } break;
-            case VK_DOWN: {
-                if (state.activeSolution == Solution.Types.length - 1) {
-                    state.activeSolution = 0;
-                } else {
-                    state.activeSolution += 1;
+
+            case WM_KEYDOWN: {
+                switch (message.wParam) {
+                case VK_UP: {
+                    if (state.activeSolution == 0) {
+                        state.activeSolution = Solution.Types.length - 1;
+                    } else {
+                        state.activeSolution -= 1;
+                    }
+                } break;
+                case VK_DOWN: {
+                    if (state.activeSolution == Solution.Types.length - 1) {
+                        state.activeSolution = 0;
+                    } else {
+                        state.activeSolution += 1;
+                    }
+                } break;
+                default: break;
                 }
             } break;
-            default: break;
-            }
-        } break;
 
-        default:
-            TranslateMessage(&message);
-            DispatchMessageA(&message);
-            break;
+            case WM_SYSKEYDOWN: {
+                switch (message.wParam) {
+                case VK_RETURN: toggleFullscreen(); break;
+                case VK_F4: break mainloop;
+                default: break;
+                }
+            } break;
+
+            default: {
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+            } break;
+            }
         }
 
-        // TODO(khvorov) It takes microui 1 frame to catch up to last input.
         state.draw(muctx, d3d11Renderer.window.width, d3d11Renderer.window.height, scratch);
         for (mu_Command* cmd = null; mu_next_command(muctx, &cmd);) {
             switch (cmd.type) {

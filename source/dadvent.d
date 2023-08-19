@@ -593,7 +593,9 @@ struct State {
         }
 
         mu_begin(muctx);
-        if (mu_begin_window_ex(muctx, "", mu_rect(0, 0, windowWidth, windowHeight), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
+        // NOTE(khvorov) This is to force the window to resize
+        string windowName = StringBuilder(scratch).fmt("Window").fmt(windowWidth).fmt(windowHeight).endNull();
+        if (mu_begin_window_ex(muctx, windowName.ptr, mu_rect(0, 0, windowWidth, windowHeight), MU_OPT_NOTITLE | MU_OPT_NOCLOSE | MU_OPT_NORESIZE)) {
             layout_row([200, -1], -1);
 
             {
@@ -798,13 +800,30 @@ struct State {
                     layout_row([-1], -1);
                     mu_begin_panel_ex(muctx, "Backpacks", MU_OPT_NOFRAME);
 
-                    int totalHeight = 20000; // TODO(khvorov) Work out
+                    int compRectHeight = fontHeight * 2;
+                    int padding = 10;
+                    int rows = 1;
+                    {
+                        layout_row([-1], 1);
+                        mu_Rect bounds = mu_layout_next(muctx);
+                        int curx = 0;
+                        foreach(backpack; sol.backpacks) {
+                            int width = cast(int)backpack.comp1.length * fontChWidth + padding;
+                            curx += width;
+                            if (curx >= bounds.w) {
+                                curx = width;
+                                rows += 1;
+                            }
+                        }
+                    }
+
+                    int totalHeight = rows * compRectHeight;
                     layout_row([-1], totalHeight);
                     mu_Rect totalBounds = mu_layout_next(muctx);
 
-                    mu_Rect compRect = mu_rect(totalBounds.x, totalBounds.y, 0, fontHeight * 2);
+                    mu_Rect compRect = mu_rect(totalBounds.x, totalBounds.y, 0, compRectHeight);
                     foreach (backpackIndex, backpack; sol.backpacks) {
-                        int padding = 10;
+
                         compRect.w = cast(int)backpack.comp1.length * fontChWidth + padding;
                         if (compRect.x + compRect.w > totalBounds.x + totalBounds.w) {
                             compRect.x = totalBounds.x;
